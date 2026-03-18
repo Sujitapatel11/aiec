@@ -39,8 +39,10 @@ const BUDGET_OPTIONS = [
 ];
 
 const INTAKE_OPTIONS = [
-  'January 2025','May 2025','September 2025',
-  'January 2026','May 2026','September 2026',
+  { label: 'Within 6 months', months: 6 },
+  { label: 'Within 1 year',   months: 12 },
+  { label: 'After 1 year',    months: 18 },
+  { label: 'Just exploring',  months: 24 },
 ];
 
 const initialForm = {
@@ -141,17 +143,10 @@ export default function Questionnaire() {
     return map[val] ?? 0;
   };
 
-  // Map budget label → months timeline from target intake
+  // Map relative timeline label → months
   const intakeToMonths = (intake) => {
-    if (!intake) return 12;
-    const now = new Date();
-    const parts = intake.split(' ');
-    const month = ['January','February','March','April','May','June',
-                   'July','August','September','October','November','December'].indexOf(parts[0]);
-    const year  = parseInt(parts[1]) || now.getFullYear();
-    const target = new Date(year, month, 1);
-    const diff = Math.round((target - now) / (1000 * 60 * 60 * 24 * 30));
-    return Math.max(1, Math.min(36, diff));
+    const found = INTAKE_OPTIONS.find(o => o.label === intake);
+    return found ? found.months : 12;
   };
 
   const handleSubmit = async () => {
@@ -291,10 +286,10 @@ export default function Questionnaire() {
           {step === 3 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Target Intake</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">When do you plan to start studying abroad?</label>
                 <select className="input-field" value={form.target_intake} onChange={e => set('target_intake', e.target.value)}>
                   <option value="">Select...</option>
-                  {INTAKE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  {INTAKE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-3 bg-primary-50 border border-primary-100 rounded-xl px-4 py-3">
