@@ -11,7 +11,16 @@ export default function Login() {
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [attempts, setAttempts] = useState(() => Number(sessionStorage.getItem('login_attempts') || 0))
-  const [lockedUntil, setLockedUntil] = useState(() => Number(sessionStorage.getItem('login_locked_until') || 0))
+  const [lockedUntil, setLockedUntil] = useState(() => {
+    const until = Number(sessionStorage.getItem('login_locked_until') || 0)
+    // Auto-clear expired lockout
+    if (until && until < Date.now()) {
+      sessionStorage.removeItem('login_locked_until')
+      sessionStorage.removeItem('login_attempts')
+      return 0
+    }
+    return until
+  })
   const [countdown, setCountdown]     = useState(0)
   const navigate = useNavigate()
 

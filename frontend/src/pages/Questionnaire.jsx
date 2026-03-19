@@ -169,7 +169,8 @@ export default function Questionnaire() {
       const res = await profileRecommend(payload);
       navigate('/results/ai', { state: { ...res.data, input_profile: payload } });
     } catch (err) {
-      setError('Could not get recommendations. Please try again.');
+      console.error('Recommendation error:', err?.response?.data || err?.message)
+      setError('Could not get recommendations. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
