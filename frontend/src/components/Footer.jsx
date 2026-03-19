@@ -56,8 +56,8 @@ export default function Footer() {
           <h4 className="font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact</h4>
           <ul className="space-y-3 text-sm text-gray-400">
             <li className="flex items-center gap-2"><span>📧</span> aaradhyainternationaleducation@gmail.com</li>
-            <li className="flex items-center gap-2"><span>📞</span> +977 9802020575</li>
-            <li className="flex items-center gap-2"><span>📍</span> India</li>
+            <li className="flex items-center gap-2"><span>📞</span> +977 9802020575 / 9766350770</li>
+            <li className="flex items-center gap-2"><span>📍</span> Ranighat-24, Birgunj, Nepal</li>
           </ul>
           <div className="mt-5 flex items-center gap-3">
             <Link to="/apply" className="inline-block bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
