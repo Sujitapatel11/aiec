@@ -1,93 +1,122 @@
 """
 AI prompt templates for AIEC study abroad recommendations.
+Advanced university matching engine with scoring logic.
 """
 
-SYSTEM_PROMPT = """You are an expert international education advisor with 20+ years of experience \
-helping students from South Asia find the best study abroad opportunities.
+SYSTEM_PROMPT = """You are an AI-powered study abroad matching engine and expert counsellor.
+
+Your task:
+Match students with suitable universities globally using structured evaluation and provide realistic admission chances.
 
 You have deep knowledge of:
-- University admission requirements across 28+ countries
+- University admission requirements across 50+ countries
 - Visa and PR pathways for international students
 - Scholarship opportunities and financial planning
 - Course structures, career outcomes, and industry demand
 - English language requirements (IELTS, TOEFL, PTE)
 - Cost of living and tuition fee comparisons globally
 
-Your recommendations are:
-- Unbiased and purely merit-based
-- Tailored to the student's financial situation
-- Realistic about eligibility and timelines
-- Focused on long-term career and immigration outcomes
+MATCHING LOGIC (STRICT):
+For each university evaluate:
+1. Academic Match Score (0–40): marks vs requirement
+2. English Match Score (0–25): IELTS vs requirement
+3. Budget Fit Score (0–20): total cost vs student budget
+4. Acceptance Probability Score (0–15): based on acceptance rate and ranking tier
 
-You consider ALL countries globally — not limited to any fixed list. \
-If a lesser-known country offers a better fit for the student's profile, budget, or goals, recommend it."""
+TOTAL SCORE = 100
+80–100 → Safe (High chance)
+60–79 → Moderate
+40–59 → Ambitious
+Below 40 → Risky
+
+IMPORTANT RULES:
+- Do NOT guarantee admission
+- Do NOT invent fake universities
+- Keep results realistic and useful
+- Prefer globally recognized education systems
+- Consider ALL countries globally — no fixed list
+
+TONE: Professional, analytical, and realistic like an expert consultant."""
 
 
 def build_recommendation_prompt(profile: dict) -> str:
-    """
-    Build the full recommendation prompt by injecting student profile values.
-
-    Args:
-        profile: validated dict with keys:
-            qualification, marks, english_score, course_interest,
-            budget, pr_preference, timeline
-
-    Returns:
-        Formatted prompt string ready to send to the AI model.
-    """
     pr_text = "Yes — student wants a clear PR / immigration pathway" \
         if profile.get("pr_preference") else \
         "No — PR is not a priority, focus on education quality"
 
     budget_usd = profile.get("budget", 0)
-    budget_context = _budget_context(budget_usd)
-
     marks = profile.get("marks", 0)
-    marks_context = _marks_context(marks)
-
     english = profile.get("english_score", 0)
-    english_context = _english_context(english)
 
     return f"""
-## Student Academic Profile
+## STUDENT PROFILE
 
-| Field              | Value                                      |
-|--------------------|--------------------------------------------|
-| Qualification      | {profile.get("qualification")}             |
-| Academic Marks     | {marks}% — {marks_context}                 |
-| English Score      | {english} (IELTS) — {english_context}      |
-| Preferred Field    | {profile.get("course_interest")}           |
-| Annual Budget      | USD ${budget_usd:,} — {budget_context}     |
-| PR Preference      | {pr_text}                                  |
-| Study Timeline     | {profile.get("timeline")} months from now  |
+| Field           | Value                                     |
+|-----------------|-------------------------------------------|
+| Qualification   | {profile.get("qualification")}            |
+| Academic Marks  | {marks}% — {_marks_context(marks)}        |
+| English Score   | {english} IELTS — {_english_context(english)} |
+| Course Interest | {profile.get("course_interest")}          |
+| Annual Budget   | USD ${budget_usd:,} — {_budget_context(budget_usd)} |
+| PR Preference   | {pr_text}                                 |
+| Study Timeline  | {profile.get("timeline")} months from now |
 
 ---
 
-## Your Task
+## YOUR TASK
 
-Analyze the student profile above and recommend the **single best country and course** \
-for this student to study abroad.
-
-**Country selection rules:**
-- Consider ALL countries globally — no fixed list, no limits
-- Recommend based purely on merit: budget fit, English requirements, \
-  PR pathways, course quality, career outcomes, and timeline feasibility
-- If a non-obvious country (e.g. Norway, Finland, Poland, Hungary, Cyprus) \
-  offers a significantly better fit, recommend it over popular choices
-- Justify why the recommended country beats the alternatives for THIS specific profile
+Using the matching scoring logic (Academic 0–40, English 0–25, Budget 0–20, Acceptance 0–15),
+evaluate universities globally and return a structured recommendation.
 
 **Response format — return ONLY valid JSON, no markdown fences, no extra text:**
 
 {{
   "best_country": "Country name",
   "recommended_course": "Full course name and level (e.g. MS Data Science)",
-  "top_universities": [
-    "University Name 1 (Country)",
-    "University Name 2 (Country)",
-    "University Name 3 (Country)",
-    "University Name 4 (Country)",
-    "University Name 5 (Country)"
-  ],
+  "university_matches": {{
+    "safe_options": [
+      {{
+        "name": "University Name",
+        "country": "Country",
+        "admission_chance_percent": 85,
+        "tuition_usd": 20000,
+        "living_cost_usd": 12000,
+        "match_reason": "Why this is a safe match for this student"
+      }}
+    ],
+    "moderate_options": [
+      {{
+        "name": "University Name",
+        "country": "Country",
+        "admission_chance_percent": 65,
+        "tuition_usd": 28000,
+        "living_cost_usd": 14000,
+        "match_reason": "Why this is a moderate match"
+      }}
+    ],
+    "ambitious_options": [
+      {{
+        "name": "University Name",
+        "country": "Country",
+        "admission_chance_percent": 45,
+        "tuition_usd": 45000,
+        "living_cost_usd": 18000,
+        "match_reason": "Why this is ambitious but worth trying"
+      }}
+    ]
+  }},
+  "best_country_reason": "Why this country has the most strong matches for this profile",
+  "profile_analysis": {{
+    "strengths": ["Strength 1", "Strength 2"],
+    "weaknesses": ["Weakness 1", "Weakness 2"],
+    "risk_factors": ["Risk 1", "Risk 2"]
+  }},
+  "strategy_to_improve": {{
+    "ielts": "IELTS improvement advice",
+    "university_targeting": "Better targeting advice",
+    "financial_preparation": "Financial advice",
+    "sop_improvement": "SOP/application advice"
+  }},
   "estimated_cost": {{
     "tuition_per_year_usd": 25000,
     "living_expenses_usd": 14000,
@@ -95,27 +124,16 @@ for this student to study abroad.
     "scholarship_possibilities": "Brief note on available scholarships",
     "currency_note": "Approximate figures. Actual costs vary by university."
   }},
-  "reason_for_recommendation": "3-4 sentences explaining why this country and course is the best fit for this specific student profile, covering budget, career outcomes, PR pathway (if relevant), and timeline.",
-  "alternative_countries": [
-    {{
-      "country": "Country name",
-      "reason": "One sentence why this is a good alternative"
-    }},
-    {{
-      "country": "Country name",
-      "reason": "One sentence why this is a good alternative"
-    }},
-    {{
-      "country": "Country name",
-      "reason": "One sentence why this is a good alternative"
-    }}
-  ],
   "pr_pathway_available": true,
-  "eligibility_notes": "Any important notes about eligibility, English test requirements, or application deadlines the student should know.",
+  "eligibility_notes": "Important notes about eligibility, English requirements, or deadlines",
   "next_steps": [
     "Step 1 the student should take",
     "Step 2",
     "Step 3"
+  ],
+  "alternative_countries": [
+    {{"country": "Country name", "reason": "One sentence why this is a good alternative"}},
+    {{"country": "Country name", "reason": "One sentence why this is a good alternative"}}
   ]
 }}
 """

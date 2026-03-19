@@ -529,10 +529,71 @@ def _build_response(profile: dict, ranked: list) -> dict:
         "top_universities": top_universities,
         "estimated_cost": estimated_cost,
         "reason_for_recommendation": reason,
-        "alternative_countries": [r["country"] for r in ranked[1:4]],
+        "alternative_countries": [
+            {"country": r["country"], "reason": f"Strong match with score {r['score']}"}
+            for r in ranked[1:4]
+        ],
         "pr_pathway_available": country_data["pr_friendly"],
         "country_language": country_data["language"],
         "processing_method": "rule_based",
+        "university_matches": {
+            "safe_options": [
+                {
+                    "name": ranked[0]["data"]["top_universities"][0],
+                    "country": ranked[0]["country"],
+                    "admission_chance_percent": 80,
+                    "tuition_usd": course_info["by_country"].get(ranked[0]["country"], {}).get("cost_usd", tuition),
+                    "living_cost_usd": ranked[0]["data"]["living_usd"],
+                    "match_reason": f"Strong budget and English fit for {ranked[0]['country']}",
+                }
+            ],
+            "moderate_options": [
+                {
+                    "name": ranked[1]["data"]["top_universities"][0] if len(ranked) > 1 else "",
+                    "country": ranked[1]["country"] if len(ranked) > 1 else "",
+                    "admission_chance_percent": 65,
+                    "tuition_usd": course_info["by_country"].get(ranked[1]["country"] if len(ranked) > 1 else "", {}).get("cost_usd", tuition),
+                    "living_cost_usd": ranked[1]["data"]["living_usd"] if len(ranked) > 1 else 0,
+                    "match_reason": f"Good alternative with slightly higher cost",
+                }
+            ],
+            "ambitious_options": [
+                {
+                    "name": ranked[2]["data"]["top_universities"][0] if len(ranked) > 2 else "",
+                    "country": ranked[2]["country"] if len(ranked) > 2 else "",
+                    "admission_chance_percent": 45,
+                    "tuition_usd": course_info["by_country"].get(ranked[2]["country"] if len(ranked) > 2 else "", {}).get("cost_usd", tuition),
+                    "living_cost_usd": ranked[2]["data"]["living_usd"] if len(ranked) > 2 else 0,
+                    "match_reason": "Stretch option — worth applying with strong SOP",
+                }
+            ],
+        },
+        "profile_analysis": {
+            "strengths": [
+                f"Budget of ${budget:,}/yr covers {country_name} well",
+                f"Interest in {profile.get('course_interest')} has strong demand globally",
+            ],
+            "weaknesses": [
+                "English score may limit top-tier university options" if profile.get("english_score", 0) < 6.5 else "Profile is competitive",
+                "Marks below 70% may require conditional offers" if profile.get("marks", 0) < 70 else "Academic profile is strong",
+            ],
+            "risk_factors": [
+                "Visa processing times may affect timeline",
+                "Scholarship competition is high — apply early",
+            ],
+        },
+        "strategy_to_improve": {
+            "ielts": "Aim for 6.5+ to unlock more university options" if profile.get("english_score", 0) < 6.5 else "Current score is competitive",
+            "university_targeting": f"Apply to 2 safe + 2 moderate + 1 ambitious university in {country_name}",
+            "financial_preparation": f"Ensure ${(tuition + living):,}/yr is accessible including visa funds",
+            "sop_improvement": "Highlight career goals, research interests, and why this specific country/university",
+        },
+        "next_steps": [
+            f"Prepare IELTS/TOEFL — target {country_data['english_min'] + 0.5} or above",
+            f"Research {course_info['course']} programs at {course_by_country['university']}",
+            "Book a free consultation with AIEC counsellor",
+        ],
+        "eligibility_notes": f"Minimum English requirement for {country_name}: {country_data['english_min']} IELTS. Apply 6–9 months before intake.",
         "all_scored_countries": [
             {"country": r["country"], "score": r["score"]} for r in ranked
         ],
@@ -555,7 +616,7 @@ def _openai_recommend(profile: dict, api_key: str) -> dict:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.4,
-            max_tokens=1200,
+            max_tokens=2500,
         )
         result = json.loads(response.choices[0].message.content)
         result["processing_method"] = "openai"
