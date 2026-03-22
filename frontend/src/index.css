@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,35 +10,109 @@
 }
 
 @layer utilities {
+  /* Fade in */
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeIn 0.35s ease-out both;
   }
   @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.95) translateY(10px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
+    from { opacity: 0; transform: scale(0.96) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  /* Slide up */
+  .animate-slide-up {
+    animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Pop */
+  .animate-pop {
+    animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Shimmer skeleton */
+  .animate-shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Progress bar fill */
+  .progress-fill {
+    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  /* Checkmark draw */
+  .animate-check {
+    animation: checkDraw 0.4s ease-out 0.1s both;
+  }
+  @keyframes checkDraw {
+    from { stroke-dashoffset: 50; opacity: 0; }
+    to   { stroke-dashoffset: 0; opacity: 1; }
+  }
+
+  /* Bounce in */
+  .animate-bounce-in {
+    animation: bounceIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes bounceIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Pulse glow */
+  .glow-green { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); animation: glowPulse 2s infinite; }
+  @keyframes glowPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+    50%      { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg;
+    @apply bg-primary-600 hover:bg-primary-700 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
   }
   .btn-accent {
-    @apply bg-accent-500 hover:bg-accent-600 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg;
+    @apply bg-accent-500 hover:bg-accent-600 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
   }
   .btn-outline {
-    @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200;
+    @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white active:scale-95 font-semibold px-6 py-3 rounded-xl transition-all duration-200;
+  }
+  .btn-green {
+    @apply bg-green-500 hover:bg-green-600 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
   }
   .input-field {
-    @apply w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all;
+    @apply w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-0 focus:border-primary-500 transition-all duration-200 bg-white hover:border-gray-300 placeholder-gray-400;
+  }
+  .input-field:focus {
+    @apply shadow-sm;
   }
   .card {
-    @apply bg-white rounded-2xl shadow-md hover:shadow-xl transition-shadow duration-300 p-6;
+    @apply bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-gray-100;
   }
   .section-title {
-    @apply text-3xl md:text-4xl font-bold text-gray-900 mb-4;
+    @apply text-3xl md:text-4xl font-extrabold text-gray-900 mb-4;
   }
   .section-subtitle {
-    @apply text-lg text-gray-600 mb-10 max-w-2xl mx-auto;
+    @apply text-lg text-gray-500 mb-10 max-w-2xl mx-auto;
+  }
+
+  /* Option card — for clickable choices */
+  .option-card {
+    @apply border-2 border-gray-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50 hover:-translate-y-0.5 select-none;
+  }
+  .option-card.selected {
+    @apply border-primary-500 bg-primary-50 shadow-sm;
   }
 }
