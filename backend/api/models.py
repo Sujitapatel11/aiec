@@ -41,6 +41,10 @@ class Lead(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        permissions = [
+            ("can_delete_lead", "Can delete lead records"),
+            ("can_export_leads", "Can export lead data"),
+        ]
 
 
 class Questionnaire(models.Model):

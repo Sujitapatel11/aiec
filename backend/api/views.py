@@ -47,6 +47,14 @@ class LeadViewSet(viewsets.ModelViewSet):
             qs = qs.filter(name__icontains=search) | qs.filter(email__icontains=search) | qs.filter(phone__icontains=search)
         return qs.order_by('-created_at')
 
+    def destroy(self, request, *args, **kwargs):
+        if not (request.user.is_superuser or request.user.has_perm('api.can_delete_lead')):
+            return Response(
+                {'error': 'Access denied. Only admins or authorized staff can delete leads.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class CountryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Country.objects.all()
