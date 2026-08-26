@@ -4,16 +4,15 @@ import { adminLogin } from '../api'
 
 const MAX_ATTEMPTS  = 5
 const LOCKOUT_MS    = 5 * 60 * 1000  // 5 minutes
-const IDLE_TIMEOUT  = 30 * 60 * 1000 // 30 minutes auto-logout
 
 export default function Login() {
+  const [activeTab, setActiveTab] = useState('staff') // 'staff' | 'admin'
   const [form, setForm]         = useState({ username: '', password: '' })
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [attempts, setAttempts] = useState(() => Number(sessionStorage.getItem('login_attempts') || 0))
   const [lockedUntil, setLockedUntil] = useState(() => {
     const until = Number(sessionStorage.getItem('login_locked_until') || 0)
-    // Auto-clear expired lockout
     if (until && until < Date.now()) {
       sessionStorage.removeItem('login_locked_until')
       sessionStorage.removeItem('login_attempts')
@@ -59,12 +58,22 @@ export default function Login() {
     setLoading(true)
     try {
       const res = await adminLogin(form)
-      // Success — clear lockout state
+      
+      const userRole = res.data.is_superuser ? 'admin' : 'staff'
+      
+      // If user selected Admin portal but logged in with a staff account
+      if (activeTab === 'admin' && !res.data.is_superuser) {
+        setError('Access denied: "Admin Portal" requires Administrator privileges. Please switch to Staff Portal.')
+        setLoading(false)
+        return
+      }
+
+      // Success — clear lockout state & save credentials
       sessionStorage.removeItem('login_attempts')
       sessionStorage.removeItem('login_locked_until')
       localStorage.setItem('aiec_token', res.data.token)
       localStorage.setItem('aiec_user', res.data.name)
-      localStorage.setItem('aiec_role', res.data.is_superuser ? 'admin' : 'staff')
+      localStorage.setItem('aiec_role', userRole)
       localStorage.setItem('aiec_last_active', Date.now().toString())
       navigate('/dashboard', { replace: true })
     } catch (err) {
@@ -86,27 +95,67 @@ export default function Login() {
     }
   }
 
+  const isAdminTab = activeTab === 'admin'
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-900 via-primary-800 to-primary-700 flex items-center justify-center px-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+    <div className={`min-h-screen transition-colors duration-500 flex items-center justify-center px-4 py-8 ${
+      isAdminTab
+        ? 'bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950'
+        : 'bg-gradient-to-br from-primary-900 via-primary-800 to-blue-900'
+    }`}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white/20">
+
+        {/* Portal Selector Tabs (University Style) */}
+        <div className="bg-gray-100 p-1.5 flex gap-1 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('staff'); setError('') }}
+            className={`flex-1 py-2.5 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'staff'
+                ? 'bg-white text-primary-700 shadow-sm border border-gray-200/80'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'
+            }`}
+          >
+            <span>👤</span> Staff Portal
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('admin'); setError('') }}
+            className={`flex-1 py-2.5 px-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'admin'
+                ? 'bg-purple-950 text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'
+            }`}
+          >
+            <span>🛡️</span> Admin Portal
+          </button>
+        </div>
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary-700 to-primary-900 px-8 py-8 text-center text-white">
-          <div className="flex justify-center mb-4">
-            <div className="bg-white rounded-2xl p-2">
-              <img src="/logo.png" alt="AIEC Logo" className="h-16 w-auto object-contain" />
+        <div className={`px-8 py-8 text-center text-white transition-all duration-500 ${
+          isAdminTab
+            ? 'bg-gradient-to-r from-purple-950 to-slate-900'
+            : 'bg-gradient-to-r from-primary-700 to-primary-900'
+        }`}>
+          <div className="flex justify-center mb-3">
+            <div className="bg-white rounded-2xl p-2 shadow-md">
+              <img src="/logo.png" alt="AIEC Logo" className="h-14 w-auto object-contain" />
             </div>
           </div>
-          <h1 className="text-xl font-extrabold">AIEC Admin</h1>
-          <p className="text-blue-200 text-sm mt-1">Staff access only</p>
+          <h1 className="text-xl font-extrabold flex items-center justify-center gap-2">
+            AIEC {isAdminTab ? 'Administrator' : 'Staff'} Portal
+          </h1>
+          <p className="text-blue-200 text-xs mt-1">
+            {isAdminTab ? '🔒 Superuser & System Management Access' : '💼 Counsellor & Lead Management Access'}
+          </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-8 py-8 space-y-4">
+        <form onSubmit={handleSubmit} className="px-8 py-7 space-y-4">
 
           {/* Lockout banner */}
           {isLocked && (
-            <div className="bg-red-50 border border-red-300 text-red-700 text-sm px-4 py-3 rounded-lg text-center">
+            <div className="bg-red-50 border border-red-300 text-red-700 text-sm px-4 py-3 rounded-xl text-center">
               <p className="font-bold">🔒 Account Temporarily Locked</p>
               <p className="text-xs mt-1">Too many failed attempts. Try again in <span className="font-bold">{Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}</span></p>
             </div>
@@ -114,18 +163,19 @@ export default function Login() {
 
           {/* Error */}
           {error && !isLocked && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
-              <span>⚠️</span> {error}
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
+              <span className="flex-shrink-0">⚠️</span>
+              <span className="text-xs leading-relaxed">{error}</span>
             </div>
           )}
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              Username
+              {isAdminTab ? 'Admin Username' : 'Staff Username'}
             </label>
             <input
               className="input-field"
-              placeholder="admin"
+              placeholder={isAdminTab ? 'admin' : 'sujitapatel5'}
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               autoComplete="username"
@@ -153,16 +203,24 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading || isLocked}
-            className="btn-primary w-full flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full py-3 px-4 rounded-xl font-bold text-sm text-white transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+              isAdminTab
+                ? 'bg-purple-900 hover:bg-purple-950 focus:ring-2 focus:ring-purple-400'
+                : 'bg-primary-600 hover:bg-primary-700 focus:ring-2 focus:ring-primary-400'
+            }`}
           >
             {loading
-              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Signing in...</>
-              : isLocked ? '🔒 Locked' : '🔐 Sign In'}
+              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Authenticating...</>
+              : isLocked ? '🔒 Locked' : (isAdminTab ? '🛡️ Sign In as Admin' : '👤 Sign In as Staff')}
           </button>
 
-          <p className="text-xs text-center text-gray-400 pt-2">
-            Only AIEC staff members can access this panel.
-          </p>
+          <div className="pt-2 text-center">
+            <p className="text-xs text-gray-400">
+              {isAdminTab
+                ? 'Authorized administrators only. All logins are logged.'
+                : 'AIEC Counsellors & Staff access portal.'}
+            </p>
+          </div>
         </form>
       </div>
     </div>
