@@ -157,8 +157,9 @@ export default function Dashboard() {
   const [filterOptions, setFilterOptions] = useState({ countries: [], courses: [] })
 
   const navigate  = useNavigate()
-  const adminName = localStorage.getItem('aiec_user') || 'Admin'
-  const isAdmin   = localStorage.getItem('aiec_role') === 'admin'
+  const adminName = localStorage.getItem('aiec_user') || 'User'
+  const userRole  = localStorage.getItem('aiec_role') || 'staff'
+  const isAdmin   = userRole === 'admin'
 
   // ── Idle auto-logout (30 min) ──────────────────────────────────────────
   useEffect(() => {
@@ -250,8 +251,12 @@ export default function Dashboard() {
               <p className="text-xs text-gray-400">Lead Management</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500 hidden sm:block">👤 {adminName}</span>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">👤 {adminName}</span>
+              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${isAdmin ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                {isAdmin ? 'Admin' : 'Staff'}
+              </span>
+            </div>
             {isAdmin && (
               <button
                 onClick={() => navigate('/staff')}
