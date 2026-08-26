@@ -393,21 +393,63 @@ export default function Questionnaire() {
   /* Validate current step before advancing */
   const validate = () => {
     if (step === 0) {
-      if (!form.name.trim())  return 'Please enter your name.';
-      if (!form.email.trim()) return 'Please enter your email.';
-      if (!form.phone.trim()) return 'Please enter your phone number.';
+      const name = form.name.trim();
+      const email = form.email.trim();
+      const phone = form.phone.trim();
+      const city = form.city.trim();
+
+      // Name validation
+      if (!name) return 'Please enter your full name.';
+      if (name.length < 3) return 'Name must be at least 3 characters long.';
+      if (!/^[a-zA-Z\s'.]{3,50}$/.test(name)) return 'Name should only contain letters and spaces.';
+      if (/(.)\1{3,}/.test(name.toLowerCase()) || /qwerty|asdfgh|zxcvbn|12345/.test(name.toLowerCase())) {
+        return 'Please enter a valid real name (avoid random characters).';
+      }
+
+      // Email validation
+      if (!email) return 'Please enter your email address.';
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(email)) return 'Please enter a valid email address (e.g. john@example.com).';
+
+      // Phone validation
+      if (!phone) return 'Please enter your phone / WhatsApp number.';
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length < 7 || digits.length > 15) return 'Please enter a valid phone number (7 to 15 digits).';
+
+      // City validation
+      if (city && !/^[a-zA-Z\s,.-]{2,50}$/.test(city)) return 'Please enter a valid city or country name.';
     }
+
     if (step === 1) {
       if (!form.education_level) return 'Please select your education level.';
+
+      // Field of interest validation
+      if (form.field_of_interest.trim() && !/^[a-zA-Z\s,.-]{2,60}$/.test(form.field_of_interest.trim())) {
+        return 'Please enter a valid field of interest (e.g. Computer Science, MBA).';
+      }
+
+      // Marks / GPA validation
+      if (form.marks && form.marks.trim()) {
+        const raw = form.marks.replace('%', '').trim();
+        const num = parseFloat(raw);
+        if (isNaN(num)) return 'Please enter a valid GPA or percentage.';
+        if (num < 1.0 || (num > 4.0 && num < 30) || num > 100) {
+          return 'Please enter a valid academic percentage (30%–100%) or GPA (1.0–4.0).';
+        }
+      }
     }
+
     if (step === 2) {
       if (!form.budget_range) return 'Please select a budget range.';
     }
+
     if (step === 3) {
       if (!form.target_intake) return 'Please select when you plan to start.';
     }
+
     return '';
   };
+
 
   const handleNext = () => {
     const err = validate();
@@ -444,11 +486,13 @@ export default function Questionnaire() {
       english_score:         form.english_score,
       work_experience_years: form.work_experience_years,
       preferred_countries:   form.preferred_countries,
-      budget:                form.budget_value,
+      budget:                form.budget_value || 25000,
       target_intake:         form.target_intake,
+      timeline:              12,
       pr_preference:         form.pr_preference,
       additional_info:       form.additional_info,
     };
+
 
     try {
       const res = await profileRecommend(payload);

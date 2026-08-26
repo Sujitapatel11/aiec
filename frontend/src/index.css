@@ -110,8 +110,9 @@
 
   /* Option card — for clickable choices */
   .option-card {
-    @apply border-2 border-gray-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-primary-400 hover:bg-primary-50 hover:-translate-y-0.5 select-none;
+    @apply border-2 border-gray-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-primary-500 hover:bg-primary-50 hover:-translate-y-0.5 select-none;
   }
+
   .option-card.selected {
     @apply border-primary-500 bg-primary-50 shadow-sm;
   }

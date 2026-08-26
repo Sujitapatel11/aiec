@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import logo from '/logo.png'
+import { chatCounsellor } from '../api'
 
 const WA_ICON = (
   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current flex-shrink-0">
@@ -236,8 +237,9 @@ BEHAVIOUR:
 
 const INITIAL_MESSAGE = {
   role: 'assistant',
-  content: "Hi! I'm Aria, your study abroad counsellor at AIEC 👋\n\nI have real data on 20+ countries — tuition, visa success rates, PR pathways, scholarships, and top universities. Ask me anything!\n\nTo get started: What's your highest qualification? (e.g. 12th grade, Bachelor's, Master's)",
+  content: "Hi! I'm Grok AI, your personal study abroad counsellor at GlobalApply AI (powered by xAI Grok) 🚀\n\nI have real data on 20+ countries — tuition, visa success rates, PR pathways, scholarships, and top universities. Ask me anything!\n\nTo get started: What's your highest qualification? (e.g. 12th grade, Bachelor's, Master's)",
 }
+
 
 // ── Rule-based replies (instant, no API cost) ──────────────────────────
 function ruleBasedReply(text) {
@@ -328,24 +330,11 @@ function ruleBasedReply(text) {
   return null
 }
 
-// ── OpenAI API call ────────────────────────────────────────────────────
+// ── Backend AI API call ────────────────────────────────────────────────────
 async function getAIReply(messages) {
-  const key = import.meta.env.VITE_OPENAI_KEY
-  if (!key) return null
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content || null
+    const res = await chatCounsellor(messages)
+    return res.data?.reply || null
   } catch {
     return null
   }
@@ -469,7 +458,7 @@ export default function ChatBot() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           ) : (
-            <span className="text-base font-extrabold tracking-widest">ARIA</span>
+            <span className="text-sm font-extrabold tracking-wider">GROK</span>
           )}
         </button>
       </div>
@@ -478,17 +467,18 @@ export default function ChatBot() {
       {open && (
         <div className="fixed bottom-44 right-5 z-50 w-80 sm:w-96 bg-gray-50 rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200" style={{ height: '480px' }}>
           {/* Header */}
-          <div className="bg-blue-600 px-4 py-3 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full overflow-hidden bg-white flex items-center justify-center flex-shrink-0">
-              <img src={logo} alt="AIEC" className="w-full h-full object-contain" />
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full overflow-hidden bg-white flex items-center justify-center flex-shrink-0 p-1">
+              <img src={logo} alt="Grok AI" className="w-full h-full object-contain" />
             </div>
             <div>
-              <p className="text-white font-semibold text-sm">Aria — Study Abroad Counsellor</p>
+              <p className="text-white font-bold text-sm">Grok AI — Counsellor</p>
               <p className="text-blue-200 text-xs flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />
-                Online · AIEC Expert
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block" />
+                Online · Powered by xAI Grok ⚡
               </p>
             </div>
+
             <button onClick={() => setOpen(false)} className="ml-auto text-blue-200 hover:text-white">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

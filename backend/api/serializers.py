@@ -82,31 +82,12 @@ class LeadCaptureSerializer(serializers.Serializer):
 
 
 class ProfileRecommendationSerializer(serializers.Serializer):
-    qualification = serializers.CharField(
-        max_length=100,
-        help_text="e.g. Bachelor's Degree, High School, Diploma"
-    )
-    marks = serializers.FloatField(
-        min_value=0, max_value=100,
-        help_text="Academic percentage or GPA converted to percentage (0–100)"
-    )
-    english_score = serializers.FloatField(
-        min_value=0, max_value=9,
-        help_text="IELTS band score (0–9). Use 0 if no test taken."
-    )
-    course_interest = serializers.CharField(
-        max_length=200,
-        help_text="e.g. Computer Science, MBA, Data Science, Engineering"
-    )
-    budget = serializers.IntegerField(
-        min_value=0,
-        help_text="Annual budget in USD"
-    )
-    pr_preference = serializers.BooleanField(
-        default=False,
-        help_text="True if student wants PR/immigration pathway"
-    )
-    timeline = serializers.IntegerField(
-        min_value=1, max_value=36,
-        help_text="Months available before intended start date"
-    )
+    qualification = serializers.CharField(max_length=100, required=False, default="Bachelor's Degree")
+    marks = serializers.FloatField(min_value=0, max_value=100, required=False, allow_null=True, default=75.0)
+    english_score = serializers.FloatField(min_value=0, max_value=9, required=False, allow_null=True, default=6.5)
+    course_interest = serializers.CharField(max_length=200, required=False, default="Computer Science")
+    budget = serializers.IntegerField(min_value=0, required=False, allow_null=True, default=25000)
+    pr_preference = serializers.BooleanField(required=False, default=False)
+    timeline = serializers.IntegerField(min_value=1, max_value=36, required=False, default=12)
+    target_intake = serializers.CharField(max_length=100, required=False, default="Within 1 year")
+

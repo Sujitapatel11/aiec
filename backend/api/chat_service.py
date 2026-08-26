@@ -5,41 +5,64 @@ Uses OpenAI if key is set, otherwise rule-based conversation flow.
 import os
 import json
 
-SYSTEM_PROMPT = """You are Aria, a friendly and expert study abroad counsellor at AIEC \
-(Aradhya International Education Consultancy).
+SYSTEM_PROMPT = """You are Grok AI, a witty, highly intelligent, and expert study abroad counsellor at GlobalApply AI (powered by xAI Grok).
 
 Your job is to:
 1. Warmly greet the student and ask about their education background
-2. Gather: qualification, marks/percentage, English score (IELTS/TOEFL), preferred course/field, \
-   annual budget (USD), whether they want PR/immigration pathway, and study timeline
-3. Once you have enough info, recommend the best country and course for them
+2. Gather: qualification, marks/percentage, English score (IELTS/TOEFL/PTE), preferred course/field, annual budget (USD), PR pathway intent, and target intake
+3. Once you have enough info, recommend the best country, course, and top universities for them
 4. Offer a free consultation and ask for their name, email, and phone number
 5. End with a warm closing message
 
 Rules:
-- Be conversational, warm, and encouraging — not robotic
+- Be conversational, witty, smart, and encouraging — like xAI Grok
 - Ask ONE question at a time
 - Keep responses SHORT (2-3 sentences max)
-- When recommending, be specific: name the country, course, and 2-3 universities
+- When recommending, be specific: name the country, course, and 2-3 universities with tuition costs
 - After collecting contact info, confirm it and say a counsellor will reach out within 24 hours
-- Never ask for all info at once — build rapport naturally
-
-You are NOT a general AI assistant. Only discuss study abroad topics."""
+- You are NOT a general AI assistant. Only discuss study abroad topics."""
 
 
 def get_chat_response(messages: list) -> dict:
     """
-    Process chat messages and return AI response.
-    messages: list of {"role": "user"|"assistant", "content": "..."}
-    Returns: {"reply": "...", "collected": {...}, "stage": "..."}
+    Process chat messages using xAI Grok API (or OpenAI fallback).
     """
-    api_key = os.getenv('OPENAI_API_KEY', '')
-    if api_key:
-        return _openai_chat(messages, api_key)
+    grok_key = os.getenv('GROK_API_KEY', '') or os.getenv('XAI_API_KEY', '')
+    openai_key = os.getenv('OPENAI_API_KEY', '')
+
+    if grok_key:
+        return _grok_chat(messages, grok_key)
+    elif openai_key:
+        return _openai_chat(messages, openai_key)
     return _rule_based_chat(messages)
 
 
+def _grok_chat(messages: list, api_key: str) -> dict:
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+
+        full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+
+        response = client.chat.completions.create(
+            model="grok-beta",
+            messages=full_messages,
+            temperature=0.7,
+            max_tokens=300,
+        )
+        reply = response.choices[0].message.content.strip()
+
+        collected = _extract_collected(messages)
+        stage = _detect_stage(messages, reply)
+
+        return {"reply": reply, "collected": collected, "stage": stage, "engine": "xAI Grok"}
+    except Exception as e:
+        print("xAI Grok API Error, falling back to rule-based chat:", e)
+        return _rule_based_chat(messages)
+
+
 def _openai_chat(messages: list, api_key: str) -> dict:
+
     try:
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
