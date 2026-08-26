@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { submitContact } from '../api';
+import CountryHoverCard from '../components/CountryHoverCard';
+import { COUNTRY_VIDEOS } from '../data/countryVideos';
 
 /* ─── Scroll-reveal hook ─── */
 function useReveal() {
@@ -81,6 +83,7 @@ export default function Home() {
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSent, setContactSent] = useState(false);
   const [contactLoading, setContactLoading] = useState(false);
+  const [activeCardId, setActiveCardId] = useState(null);
   const wa = import.meta.env.VITE_WHATSAPP || '919802020575';
 
   const handleContact = async (e) => {
@@ -265,22 +268,15 @@ export default function Home() {
             <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4">Where Will You Study?</h2>
             <p className="text-gray-500 max-w-xl mx-auto">We help students secure admissions in top universities across 15+ countries.</p>
           </Reveal>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {COUNTRIES.map((c, i) => (
-              <Reveal key={c.name} delay={i * 80}>
-                <div className={`bg-gradient-to-br ${c.color} border ${c.border} rounded-2xl p-6 hover:-translate-y-1 transition-all duration-300 cursor-pointer group`}>
-                  <div className="flex items-center gap-4 mb-4">
-                    <span className="text-5xl">{c.flag}</span>
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-lg">{c.name}</h3>
-                      <span className="text-xs font-semibold text-primary-600 bg-white/70 px-2 py-0.5 rounded-full">{c.tag}</span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-600 leading-relaxed">{c.desc}</p>
-                  <div className="mt-4 flex items-center gap-1 text-primary-600 text-sm font-semibold group-hover:gap-2 transition-all">
-                    Learn more <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {COUNTRY_VIDEOS.map((c, i) => (
+              <Reveal key={c.id} delay={i * 60}>
+                <CountryHoverCard
+                  country={c}
+                  activeCardId={activeCardId}
+                  onHover={setActiveCardId}
+                  onClick={() => window.location.href = '/apply'}
+                />
               </Reveal>
             ))}
           </div>
