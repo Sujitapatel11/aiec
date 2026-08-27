@@ -13,6 +13,7 @@ const Results        = lazy(() => import('./pages/Results'))
 const Dashboard      = lazy(() => import('./pages/Dashboard'))
 const Login          = lazy(() => import('./pages/Login'))
 const StaffManagement = lazy(() => import('./pages/StaffManagement'))
+const StudentPortal  = lazy(() => import('./pages/StudentPortal'))
 
 // Loading spinner
 function PageLoader() {
@@ -49,8 +50,9 @@ export default function App() {
               <Route path="/apply"       element={<Questionnaire />} />
               <Route path="/results/:id" element={<Results />} />
               <Route path="/login"       element={<Login />} />
-              <Route path="/dashboard"   element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/staff"       element={<PrivateRoute><StaffManagement /></PrivateRoute>} />
+              <Route path="/dashboard"   element={<PrivateRoute allowedRoles={['admin', 'staff']}><Dashboard /></PrivateRoute>} />
+              <Route path="/staff"       element={<PrivateRoute allowedRoles={['admin', 'staff']}><StaffManagement /></PrivateRoute>} />
+              <Route path="/student-portal" element={<PrivateRoute allowedRoles={['student']}><StudentPortal /></PrivateRoute>} />
             </Routes>
           </Suspense>
         </main>

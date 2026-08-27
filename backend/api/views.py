@@ -86,20 +86,31 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def admin_login(request):
-    """Returns a token for valid staff/superuser credentials."""
+    """Returns a token for valid credentials and matching role."""
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()
+    role = request.data.get('role', '').strip().lower()
 
-    if not username or not password:
-        return Response({'error': 'Username and password are required.'}, status=400)
+    if not username or not password or not role:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
     user = authenticate(username=username, password=password)
 
-    if not user:
-        return Response({'error': 'Invalid credentials.'}, status=401)
+    if not user or not user.is_active:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    if not (user.is_staff or user.is_superuser):
-        return Response({'error': 'Access denied. Staff only.'}, status=403)
+    # Determine actual_role explicitly
+    if user.is_superuser:
+        actual_role = 'admin'
+    elif user.groups.filter(name='Staff').exists():
+        actual_role = 'staff'
+    elif user.groups.filter(name='Student').exists():
+        actual_role = 'student'
+    else:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if role != actual_role:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({
@@ -107,7 +118,7 @@ def admin_login(request):
         'username': user.username,
         'name': user.get_full_name() or user.username,
         'is_superuser': user.is_superuser,
-        'role': 'admin' if user.is_superuser else 'staff',
+        'role': actual_role,
     })
 
 

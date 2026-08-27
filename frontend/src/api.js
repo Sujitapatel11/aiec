@@ -12,14 +12,17 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Redirect to login on 401
+// Redirect to login on 401 (except when attempting to log in)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login/')) {
       localStorage.removeItem('aiec_token')
       localStorage.removeItem('aiec_user')
-      window.location.href = '/login'
+      localStorage.removeItem('aiec_role')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(err)
   }
