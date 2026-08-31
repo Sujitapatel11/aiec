@@ -523,8 +523,24 @@ def _build_response(profile: dict, ranked: list) -> dict:
         f"The {course_info['course']} at {course_by_country['university']} aligns well with your goals."
     )
 
+    # Calculate real profile-based visa success probability percentage
+    top_score = top["score"]
+    visa_success_percentage = min(98, max(58, round(top_score * 0.9 + 10)))
+
+    destination_breakdown = [
+        {
+            "name": r["country"],
+            "rate": min(98, max(50, round(r["score"] * 0.9 + 8))),
+            "score": r["score"],
+        }
+        for r in ranked[:4]
+    ]
+
     return {
         "best_country": country_name,
+        "visa_success_percentage": visa_success_percentage,
+        "overall_visa_chance": visa_success_percentage,
+        "destination_breakdown": destination_breakdown,
         "recommended_course": course_info["course"],
         "top_universities": top_universities,
         "estimated_cost": estimated_cost,

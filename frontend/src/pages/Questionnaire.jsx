@@ -401,7 +401,7 @@ export default function Questionnaire() {
       const digits = phone.replace(/\D/g, '');
       if (digits.length < 7 || digits.length > 15) return 'Please enter a valid phone number (7 to 15 digits).';
 
-      if (city && !/^[a-zA-Z\s,.-]{2,50}$/.test(city)) return 'Please enter a valid city or country name.';
+      if (city && city.length < 2) return 'City name must be at least 2 characters.';
     }
 
     if (step === 1) {
@@ -471,7 +471,13 @@ export default function Questionnaire() {
         },
       });
     } catch (e) {
-      setError(e.response?.data?.error || 'Something went wrong. Please try again.');
+      const details = e.response?.data?.details;
+      let errMsg = e.response?.data?.error || 'Something went wrong. Please try again.';
+      if (details && typeof details === 'object') {
+        const firstErr = Object.values(details).flat()[0];
+        if (firstErr) errMsg = `Validation error: ${firstErr}`;
+      }
+      setError(errMsg);
       setLoading(false);
     }
   };

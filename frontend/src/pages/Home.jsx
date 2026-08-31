@@ -30,10 +30,7 @@ import CountryHoverCard from '../components/CountryHoverCard';
 import VisaGauge2D from '../components/VisaGauge2D';
 import { COUNTRY_VIDEOS } from '../data/countryVideos';
 
-// Lazy-loaded 3D Globe Component for maximum Core Web Vitals performance
-const HeroGlobe3D = lazy(() => import('../components/3d/HeroGlobe3D'));
-
-/* ─── Static Icon Mappings for Clean Look ─── */
+// Static Icon Mappings for Clean Look
 const SERVICES = [
   { icon: Bot, title: 'AI-Based Country Recommendation', desc: 'Our AI engine analyses your marks, budget, IELTS score, and goals to recommend the best-fit countries and universities.' },
   { icon: ShieldCheck, title: 'Visa Success Prediction', desc: 'Get a realistic visa success probability based on your profile before you even apply — no surprises.' },
@@ -52,7 +49,7 @@ const TESTIMONIALS = [
 
 const STATS = [
   { value: '500+', label: 'Students Guided', icon: GraduationCap },
-  { value: '98%', label: 'Visa Success Rate', icon: ShieldCheck },
+  { value: 'Verified', label: 'Guidance Track Record', icon: ShieldCheck },
   { value: '50+', label: 'Partner Universities', icon: Building2 },
   { value: '15+', label: 'Countries Covered', icon: Globe2 },
 ];
@@ -89,7 +86,7 @@ export default function Home() {
   return (
     <div className="overflow-x-hidden bg-slate-50/50">
 
-      {/* ══ 1. HERO SECTION (Light Theme + Interactive 3D Globe) ══ */}
+      {/* ══ 1. HERO SECTION (Light Theme + Cinematic Background Video Showcase) ══ */}
       <section className="relative min-h-[90vh] flex items-center bg-gradient-to-b from-white via-slate-50/80 to-slate-100/50 pt-8 pb-20 overflow-hidden border-b border-slate-200/60">
         {/* Soft Ambient Background Light Blowouts */}
         <div className="absolute top-12 left-1/4 w-96 h-96 bg-navy-600/5 rounded-full blur-3xl pointer-events-none" />
@@ -157,36 +154,59 @@ export default function Home() {
             </div>
           </motion.div>
 
-          {/* Right Hero Interactive 3D Globe Showcase (5 Cols) */}
+          {/* Right Hero Cinematic Video Showcase (5 Cols) */}
           <motion.div
             className="lg:col-span-5 relative"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
           >
-            <div className="glass-card p-4 sm:p-6 bg-white/70 backdrop-blur-xl border border-slate-200/80 shadow-2xl shadow-navy-950/5 relative">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-2 px-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-navy-800 uppercase tracking-wider font-display">
-                  <Globe2 className="w-4 h-4 text-crimson-600 animate-spin" style={{ animationDuration: '12s' }} />
-                  Global Study Destinations Network
+            <div className="relative rounded-3xl overflow-hidden border border-slate-200/80 shadow-2xl shadow-navy-950/10 group h-[380px] bg-navy-950">
+              {/* Background Poster Image (Fallback for slow connections/mobile) */}
+              <img
+                src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80"
+                alt="Students at Global University Campus"
+                className="absolute inset-0 w-full h-full object-cover opacity-80 transition-opacity duration-700"
+                loading="lazy"
+              />
+
+              {/* Cinematic Autoplay Video Element */}
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80"
+                className="absolute inset-0 w-full h-full object-cover z-0 opacity-90 transition-transform duration-1000 group-hover:scale-105"
+              >
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-group-of-friends-learning-on-a-laptop-42528-large.mp4" type="video/mp4" />
+              </video>
+
+              {/* Subtle Dark Gradient Overlay for Text Readability */}
+              <div className="absolute inset-0 bg-gradient-to-t from-navy-950/90 via-navy-950/40 to-transparent z-10 pointer-events-none" />
+
+              {/* Overlaid Header Badge & Subtitle */}
+              <div className="relative z-20 p-6 flex flex-col justify-between h-full text-white">
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-sm font-display">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+                    Global Study Experience
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-300 bg-amber-500/20 border border-amber-400/40 px-3 py-1 rounded-full backdrop-blur-md font-display">
+                    Cinematic Showcase
+                  </span>
                 </div>
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  Live 3D
-                </span>
+
+                <div className="space-y-1">
+                  <h3 className="font-display font-extrabold text-xl text-white tracking-tight">
+                    Transforming Ambitions Into Offers
+                  </h3>
+                  <p className="text-xs text-slate-200 font-sans">
+                    500+ Nepali students guided to top universities in UK, Canada, Australia, USA & Europe.
+                  </p>
+                </div>
               </div>
-
-              {/* 3D R3F Canvas Container */}
-              <Suspense fallback={
-                <div className="w-full h-[400px] flex items-center justify-center bg-slate-50 rounded-2xl">
-                  <div className="w-10 h-10 border-4 border-navy-600 border-t-crimson-600 rounded-full animate-spin" />
-                </div>
-              }>
-                <HeroGlobe3D />
-              </Suspense>
-
-              <p className="text-center text-xs text-slate-500 font-sans mt-2">
-                Interactive: Drag to orbit globe · Touch destinations to view routes
-              </p>
             </div>
           </motion.div>
 

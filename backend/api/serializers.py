@@ -82,12 +82,27 @@ class LeadCaptureSerializer(serializers.Serializer):
 
 
 class ProfileRecommendationSerializer(serializers.Serializer):
-    qualification = serializers.CharField(max_length=100, required=False, default="Bachelor's Degree")
-    marks = serializers.FloatField(min_value=0, max_value=100, required=False, allow_null=True, default=75.0)
-    english_score = serializers.FloatField(min_value=0, max_value=9, required=False, allow_null=True, default=6.5)
-    course_interest = serializers.CharField(max_length=200, required=False, default="Computer Science")
+    qualification = serializers.CharField(max_length=100, required=False, allow_blank=True, default="Bachelor's Degree")
+    marks = serializers.FloatField(required=False, allow_null=True, default=75.0)
+    english_score = serializers.FloatField(required=False, allow_null=True, default=6.5)
+    course_interest = serializers.CharField(max_length=200, required=False, allow_blank=True, default="Computer Science")
     budget = serializers.IntegerField(min_value=0, required=False, allow_null=True, default=25000)
     pr_preference = serializers.BooleanField(required=False, default=False)
     timeline = serializers.IntegerField(min_value=1, max_value=36, required=False, default=12)
-    target_intake = serializers.CharField(max_length=100, required=False, default="Within 1 year")
+    target_intake = serializers.CharField(max_length=100, required=False, allow_blank=True, default="Within 1 year")
+    additional_info = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_marks(self, value):
+        if value is None:
+            return 75.0
+        # If user entered GPA (e.g. 3.5 <= 5.0), scale to percentage (e.g. 3.5 -> 87.5%)
+        if 0 < value <= 5.0:
+            return round(value * 25.0, 1)
+        # If user entered exam total marks (e.g. 850 out of 1000), convert to percentage
+        if value > 100:
+            if value <= 1000:
+                return round((value / 1000.0) * 100.0, 1)
+            return 100.0
+        return max(0.0, min(100.0, value))
+
 

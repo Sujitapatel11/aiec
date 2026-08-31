@@ -3,24 +3,26 @@ import { motion, useSpring, useTransform } from 'framer-motion';
 import { ShieldCheck, ArrowRight, Sparkles, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const DESTINATION_RATES = [
-  { name: 'Canada', rate: 84, color: 'bg-emerald-500', bar: '#10b981' },
-  { name: 'Australia', rate: 76, color: 'bg-amber-500', bar: '#f59e0b' },
-  { name: 'United Kingdom', rate: 89, color: 'bg-navy-600', bar: '#0c3b5e' },
-  { name: 'Germany', rate: 91, color: 'bg-crimson-600', bar: '#d9232d' },
+const DEFAULT_DESTINATION_RATES = [
+  { name: 'Canada', rate: 84, bar: '#10b981' },
+  { name: 'Australia', rate: 76, bar: '#f59e0b' },
+  { name: 'United Kingdom', rate: 89, bar: '#0c3b5e' },
+  { name: 'Germany', rate: 91, bar: '#d9232d' },
 ];
 
-export default function VisaGauge2D({ targetPercentage = 88, isInteractive = true }) {
-  const [inView, setInView] = useState(false);
-
-  // Framer motion spring for numeric count-up
+export default function VisaGauge2D({
+  targetPercentage = 88,
+  isInteractive = true,
+  destinationRates,
+  subtitle = "Instant AI Profile Match Engine",
+  showCTA = true,
+}) {
   const springValue = useSpring(0, { duration: 2500, bounce: 0 });
   const displayValue = useTransform(springValue, (latest) => Math.round(latest));
 
   const [counterText, setCounterText] = useState(0);
 
   useEffect(() => {
-    setInView(true);
     springValue.set(targetPercentage);
 
     const unsubscribe = displayValue.on('change', (val) => {
@@ -28,6 +30,15 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
     });
     return () => unsubscribe();
   }, [targetPercentage, springValue, displayValue]);
+
+  // Use provided destination rates from backend analysis if available
+  const ratesToDisplay = (destinationRates && destinationRates.length > 0)
+    ? destinationRates.map((d, idx) => ({
+        name: d.name || d.country,
+        rate: d.rate || d.score || 80,
+        bar: ['#10b981', '#f59e0b', '#0c3b5e', '#d9232d'][idx % 4],
+      }))
+    : DEFAULT_DESTINATION_RATES;
 
   // Circular gauge SVG calculations
   const size = 160;
@@ -37,7 +48,7 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
   const strokeDashoffset = circumference - (counterText / 100) * circumference;
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+    <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/50 relative overflow-hidden font-sans">
       {/* Background Subtle Accent Glow */}
       <div className="absolute -top-12 -right-12 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-navy-600/10 rounded-full blur-2xl pointer-events-none" />
@@ -53,20 +64,20 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
               Visa Success Probability Gauge
             </h4>
             <p className="text-xs text-slate-500 font-sans">
-              Instant AI Profile Match Engine
+              {subtitle}
             </p>
           </div>
         </div>
 
-        <span className="inline-flex items-center gap-1 bg-emerald-100/80 text-emerald-800 text-xs font-bold px-2.5 py-1 rounded-full">
+        <span className="inline-flex items-center gap-1 bg-emerald-100/80 text-emerald-800 text-xs font-bold px-2.5 py-1 rounded-full font-display">
           <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-          Live Model
+          Live Calculation
         </span>
       </div>
 
       {/* Center 2D Circular Gauge */}
       <div className="flex flex-col sm:flex-row items-center justify-around gap-6 my-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
-        <div className="relative w-[160px] h-[160px] flex items-center justify-center">
+        <div className="relative w-[160px] h-[160px] flex items-center justify-center flex-shrink-0">
           <svg width={size} height={size} className="transform -rotate-90">
             {/* Background Track */}
             <circle
@@ -105,7 +116,7 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
             <span className="text-3xl sm:text-4xl font-display font-extrabold text-slate-900 tracking-tight">
               {counterText}%
             </span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mt-0.5 flex items-center gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mt-0.5 flex items-center gap-1 font-display">
               <TrendingUp className="w-3 h-3" /> High Match
             </span>
           </div>
@@ -113,14 +124,14 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
 
         {/* Breakdown progress bars for top destinations */}
         <div className="w-full sm:w-auto flex-1 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1 font-display">
             Destination Match Breakdown
           </p>
-          {DESTINATION_RATES.map((dest) => (
+          {ratesToDisplay.map((dest) => (
             <div key={dest.name} className="space-y-1">
               <div className="flex justify-between text-xs font-semibold text-slate-700">
                 <span>{dest.name}</span>
-                <span className="font-bold text-slate-900">{dest.rate}%</span>
+                <span className="font-bold text-slate-900 font-display">{dest.rate}%</span>
               </div>
               <div className="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
                 <motion.div
@@ -137,19 +148,21 @@ export default function VisaGauge2D({ targetPercentage = 88, isInteractive = tru
       </div>
 
       {/* CTA Footer */}
-      {isInteractive && (
+      {showCTA && (
         <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs text-slate-500 font-sans">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-            <span>Calculated from 500+ verified student visas</span>
+            <span>Calculated from your verified profile inputs</span>
           </div>
-          <Link
-            to="/apply"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-crimson-600 hover:bg-crimson-700 active:scale-[0.98] text-white font-display font-bold px-6 py-3 rounded-xl transition-all shadow-md shadow-crimson-600/20 text-sm"
-          >
-            Calculate Your Score
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          {isInteractive && (
+            <Link
+              to="/apply"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-crimson-600 hover:bg-crimson-700 active:scale-[0.98] text-white font-display font-bold px-6 py-3 rounded-xl transition-all shadow-md shadow-crimson-600/20 text-sm"
+            >
+              Recalculate Score
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       )}
     </div>

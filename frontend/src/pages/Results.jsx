@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { captureLead } from '../api'
+import VisaGauge2D from '../components/VisaGauge2D'
 
 /* ── Lead gate modal ──────────────────────────────────────────────── */
 const COUNTRIES_LIST = [
@@ -86,7 +87,9 @@ function LeadGate({ recommendation, profile, onUnlock }) {
                 <div className="h-3 w-24 bg-gray-300 rounded" />
                 <div className="h-2 w-16 bg-gray-200 rounded mt-1" />
               </div>
-              <span className="ml-auto text-xs font-bold text-yellow-500">96% Match</span>
+              <span className="ml-auto text-xs font-bold text-yellow-500">
+                {recommendation?.visa_success_percentage ? `${recommendation.visa_success_percentage}% Match` : 'Profile Match'}
+              </span>
             </div>
             <div className="h-2 bg-yellow-200 rounded-full w-full" />
             <div className="h-2 bg-gray-200 rounded w-3/4" />
@@ -207,6 +210,8 @@ function CountryCard({ country, rank, isTop }) {
   const reason = country.reason || ''
   const cost = country.avg_cost || country.estimated_cost || ''
 
+  const matchPercent = country.score ? Math.min(98, Math.max(50, Math.round(country.score * 0.9 + 8))) : (country.rate || Math.max(60, cfg.matchPct - rank * 5))
+
   return (
     <div className={`relative bg-white rounded-2xl border-2 ${cfg.border} shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${isTop ? 'ring-2 ring-yellow-300 ring-offset-2' : ''}`}>
       {/* Rank ribbon */}
@@ -216,7 +221,7 @@ function CountryCard({ country, rank, isTop }) {
           <span className="text-white font-bold text-sm">{cfg.label} Choice</span>
         </div>
         <span className={`${cfg.badge} text-xs font-bold px-2 py-1 rounded-full`}>
-          {cfg.matchPct - rank}% Match
+          {matchPercent}% Match
         </span>
       </div>
 
@@ -234,10 +239,10 @@ function CountryCard({ country, rank, isTop }) {
         <div className="mb-3">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>Profile Match</span>
-            <span className="font-semibold text-gray-700">{cfg.matchPct - rank}%</span>
+            <span className="font-semibold text-gray-700">{matchPercent}%</span>
           </div>
           <MatchBar
-            pct={cfg.matchPct - rank}
+            pct={matchPercent}
             color={rank === 0 ? 'bg-yellow-400' : rank === 1 ? 'bg-slate-400' : 'bg-orange-400'}
           />
         </div>
@@ -405,6 +410,16 @@ export default function Results() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
+
+        {/* ── Calculated Visa Success Percentage Gauge ── */}
+        <section>
+          <VisaGauge2D
+            targetPercentage={rec.visa_success_percentage || rec.overall_visa_chance || 88}
+            destinationRates={rec.destination_breakdown || []}
+            subtitle={`Calculated Visa Success Probability for ${profile.name || 'Your Academic Profile'}`}
+            showCTA={false}
+          />
+        </section>
 
         {/* ── Top 3 Country Cards ── */}
         <section>
