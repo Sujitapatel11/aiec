@@ -1,36 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { User, GraduationCap, Globe, Target, Sparkles, Check, ArrowRight, ArrowLeft, ShieldCheck, Award, BookOpen, Award as Medal, DollarSign, Calendar, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { profileRecommend } from '../api';
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 const STEPS = [
-  { id: 'personal',    title: 'Basic Info',       icon: '👤', desc: 'Tell us about yourself' },
-  { id: 'education',   title: 'Academic Details', icon: '🎓', desc: 'Your education background' },
-  { id: 'preferences', title: 'Preferences',      icon: '🌍', desc: 'Budget & destination' },
-  { id: 'goals',       title: 'Goals',            icon: '🎯', desc: 'Timeline & ambitions' },
+  { id: 'personal',    title: 'Basic Info',       icon: User, desc: 'Tell us about yourself' },
+  { id: 'education',   title: 'Academic Details', icon: GraduationCap, desc: 'Your education background' },
+  { id: 'preferences', title: 'Preferences',      icon: Globe, desc: 'Budget & destination' },
+  { id: 'goals',       title: 'Goals',            icon: Target, desc: 'Timeline & ambitions' },
 ];
 
 const BUDGET_OPTIONS = [
-  { label: 'Under $10,000/yr',   value: 8000,  icon: '💚', tag: 'Budget-friendly' },
-  { label: '$10,000–$20,000/yr', value: 15000, icon: '💛', tag: 'Moderate' },
-  { label: '$20,000–$35,000/yr', value: 27000, icon: '🧡', tag: 'Standard' },
-  { label: '$35,000–$50,000/yr', value: 42000, icon: '❤️', tag: 'Premium' },
-  { label: 'Above $50,000/yr',   value: 60000, icon: '💜', tag: 'Top-tier' },
+  { label: 'Under $10,000/yr',   value: 8000,  tag: 'Budget-friendly' },
+  { label: '$10,000–$20,000/yr', value: 15000, tag: 'Moderate' },
+  { label: '$20,000–$35,000/yr', value: 27000, tag: 'Standard' },
+  { label: '$35,000–$50,000/yr', value: 42000, tag: 'Premium' },
+  { label: 'Above $50,000/yr',   value: 60000, tag: 'Top-tier' },
 ];
 
 const INTAKE_OPTIONS = [
-  { label: 'Within 6 months', months: 6,  icon: '🔥', tag: 'Urgent' },
-  { label: 'Within 1 year',   months: 12, icon: '📅', tag: 'Planning' },
-  { label: 'After 1 year',    months: 18, icon: '🗓️', tag: 'Flexible' },
-  { label: 'Just exploring',  months: 24, icon: '🔍', tag: 'Research' },
+  { label: 'Within 6 months', months: 6,  tag: 'Urgent' },
+  { label: 'Within 1 year',   months: 12, tag: 'Planning' },
+  { label: 'After 1 year',    months: 18, tag: 'Flexible' },
+  { label: 'Just exploring',  months: 24, tag: 'Research' },
 ];
 
 const EDUCATION_OPTIONS = [
-  { label: 'High School / 12th Grade', icon: '📚' },
-  { label: 'Diploma',                  icon: '📜' },
-  { label: "Bachelor's Degree",        icon: '🎓' },
-  { label: "Master's Degree",          icon: '🏅' },
-  { label: 'PhD',                      icon: '🔬' },
+  { label: 'High School / 12th Grade' },
+  { label: 'Diploma' },
+  { label: "Bachelor's Degree" },
+  { label: "Master's Degree" },
+  { label: 'PhD' },
 ];
 
 const ENGLISH_OPTIONS = [
@@ -50,16 +51,16 @@ const TOP_COUNTRIES = [
 ];
 
 const LOADING_STEPS = [
-  { text: 'Analyzing your academic profile…',     icon: '📊' },
-  { text: 'Matching with top universities…',      icon: '🏛️' },
-  { text: 'Calculating visa success chances…',    icon: '🛂' },
-  { text: 'Preparing your personalized report…',  icon: '📋' },
+  { text: 'Analyzing your academic profile…',     icon: GraduationCap },
+  { text: 'Matching with top universities…',      icon: Globe },
+  { text: 'Calculating visa success chances…',    icon: ShieldCheck },
+  { text: 'Preparing your personalized report…',  icon: Sparkles },
 ];
 
 const MICRO_REWARDS = {
-  1: { msg: "Great start! Let's check your academic profile 🎓", color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  2: { msg: "Excellent! You're eligible for top countries 🎯",   color: 'bg-green-50 border-green-200 text-green-700' },
-  3: { msg: "Almost there! Just your goals left 🚀",             color: 'bg-purple-50 border-purple-200 text-purple-700' },
+  1: { msg: "Great start! Let's check your academic profile 🎓", color: 'bg-navy-50 border-navy-200 text-navy-800' },
+  2: { msg: "Excellent! You're eligible for top countries 🎯",   color: 'bg-emerald-50 border-emerald-200 text-emerald-800' },
+  3: { msg: "Almost there! Just your goals left 🚀",             color: 'bg-crimson-50 border-crimson-200 text-crimson-800' },
 };
 
 const initialForm = {
@@ -77,34 +78,35 @@ const initialForm = {
 function StepIndicator({ current }) {
   const pct = Math.round(((current) / STEPS.length) * 100);
   return (
-    <div className="w-full mb-8">
+    <div className="w-full mb-8 font-display">
       {/* Progress bar */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-primary-600">{pct}% completed</span>
-        <span className="text-xs text-gray-400">Step {current + 1} of {STEPS.length}</span>
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-xs font-bold text-navy-700">{pct}% completed</span>
+        <span className="text-xs text-slate-400 font-medium">Step {current + 1} of {STEPS.length}</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2.5 mb-5 overflow-hidden">
+      <div className="w-full bg-slate-100 rounded-full h-2.5 mb-6 overflow-hidden">
         <div
-          className="h-2.5 rounded-full bg-gradient-to-r from-primary-500 to-primary-700 progress-fill"
+          className="h-2.5 rounded-full bg-gradient-to-r from-navy-600 to-crimson-600 transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
       {/* Step dots */}
       <div className="flex items-center justify-between relative">
-        <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-100 -z-0" />
+        <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-100 -z-0" />
         {STEPS.map((s, i) => {
           const done    = i < current;
           const active  = i === current;
+          const StepIcon = s.icon;
           return (
             <div key={s.id} className="flex flex-col items-center gap-1.5 z-10">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300
-                ${done   ? 'bg-primary-600 border-primary-600 text-white scale-90'  : ''}
-                ${active ? 'bg-white border-primary-600 text-primary-600 shadow-md scale-110' : ''}
-                ${!done && !active ? 'bg-white border-gray-200 text-gray-400' : ''}
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300
+                ${done   ? 'bg-navy-600 border-navy-600 text-white scale-95 shadow-sm'  : ''}
+                ${active ? 'bg-white border-navy-600 text-navy-600 shadow-md scale-110' : ''}
+                ${!done && !active ? 'bg-white border-slate-200 text-slate-400' : ''}
               `}>
-                {done ? '✓' : s.icon}
+                {done ? <Check className="w-4 h-4" /> : <StepIcon className="w-4 h-4" />}
               </div>
-              <span className={`text-xs font-medium hidden sm:block ${active ? 'text-primary-600' : done ? 'text-gray-500' : 'text-gray-300'}`}>
+              <span className={`text-xs font-semibold hidden sm:block ${active ? 'text-navy-700' : done ? 'text-slate-500' : 'text-slate-300'}`}>
                 {s.title}
               </span>
             </div>
@@ -116,25 +118,20 @@ function StepIndicator({ current }) {
 }
 
 /* ── OptionCard ─────────────────────────────────────────────────────── */
-function OptionCard({ icon, label, tag, selected, onClick }) {
+function OptionCard({ label, tag, selected, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`option-card w-full text-left flex items-center gap-3 ${selected ? 'selected' : ''}`}
+      className={`option-card w-full text-left flex items-center justify-between gap-3 ${selected ? 'selected' : ''}`}
     >
-      {icon && <span className="text-2xl flex-shrink-0">{icon}</span>}
-      <div className="flex-1 min-w-0">
-        <p className={`font-semibold text-sm leading-tight ${selected ? 'text-primary-700' : 'text-gray-800'}`}>{label}</p>
-        {tag && <p className="text-xs text-gray-400 mt-0.5">{tag}</p>}
+      <div className="flex-1 min-w-0 font-sans">
+        <p className={`font-semibold text-sm leading-tight ${selected ? 'text-navy-800 font-display font-bold' : 'text-slate-800'}`}>{label}</p>
+        {tag && <p className="text-xs text-slate-400 mt-0.5">{tag}</p>}
       </div>
       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all
-        ${selected ? 'bg-primary-600 border-primary-600' : 'border-gray-300'}`}>
-        {selected && (
-          <svg className="w-3 h-3 text-white animate-check" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 12 12">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" strokeDasharray="50" strokeDashoffset="0" />
-          </svg>
-        )}
+        ${selected ? 'bg-navy-600 border-navy-600' : 'border-slate-300'}`}>
+        {selected && <Check className="w-3 h-3 text-white" />}
       </div>
     </button>
   );
@@ -155,7 +152,7 @@ function CountryPicker({ selected, onChange }) {
     <div>
       <input
         className="input-field text-sm mb-3"
-        placeholder="🔍 Search countries…"
+        placeholder="Search study destinations…"
         value={search}
         onChange={e => setSearch(e.target.value)}
       />
@@ -166,17 +163,17 @@ function CountryPicker({ selected, onChange }) {
             <button
               key={c} type="button" onClick={() => toggle(c)}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all duration-200
-                ${sel ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700'}`}
+                ${sel ? 'border-navy-600 bg-navy-50 text-navy-800 font-bold' : 'border-slate-200 hover:border-navy-300 hover:bg-slate-50 text-slate-700'}`}
             >
               <span className="text-lg">{FLAGS[c] || '🌍'}</span>
               <span className="truncate">{c}</span>
-              {sel && <span className="ml-auto text-primary-500 text-xs">✓</span>}
+              {sel && <Check className="ml-auto text-navy-600 w-3.5 h-3.5" />}
             </button>
           );
         })}
       </div>
       {selected.length > 0 && (
-        <p className="text-xs text-primary-600 font-medium mt-2">{selected.length} selected (max 5)</p>
+        <p className="text-xs text-navy-600 font-semibold mt-2 font-display">{selected.length} selected (max 5)</p>
       )}
     </div>
   );
@@ -191,23 +188,17 @@ function LoadingScreen() {
     const d = setInterval(() => setDots(p => p.length >= 3 ? '' : p + '.'), 400);
     return () => { clearInterval(t); clearInterval(d); };
   }, []);
+  const CurrentIcon = LOADING_STEPS[step].icon;
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-900 via-primary-800 to-primary-700 flex items-center justify-center px-4">
-      <div className="text-center text-white max-w-sm w-full">
-        <div className="text-6xl mb-6 animate-bounce-in">{LOADING_STEPS[step].icon}</div>
-        <h2 className="text-2xl font-extrabold mb-2">Analyzing Your Profile</h2>
-        <p className="text-blue-200 text-base mb-8 min-h-[1.5rem]">{LOADING_STEPS[step].text}{dots}</p>
-        {/* Animated progress */}
-        <div className="w-full bg-white/20 rounded-full h-2 mb-6 overflow-hidden">
-          <div className="h-2 bg-white rounded-full animate-pulse" style={{ width: `${((step + 1) / LOADING_STEPS.length) * 100}%`, transition: 'width 1.2s ease' }} />
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 flex items-center justify-center px-4">
+      <div className="text-center text-slate-900 max-w-sm w-full font-display space-y-4">
+        <div className="w-16 h-16 bg-navy-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-navy-600/20">
+          <CurrentIcon className="w-8 h-8 animate-pulse" />
         </div>
-        <div className="flex justify-center gap-2">
-          {LOADING_STEPS.map((s, i) => (
-            <div key={i} className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all duration-500
-              ${i <= step ? 'bg-white/20 text-white' : 'bg-white/5 text-white/30'}`}>
-              <span>{s.icon}</span>
-            </div>
-          ))}
+        <h2 className="text-2xl font-extrabold">Analyzing Your Profile</h2>
+        <p className="text-slate-600 text-sm font-sans min-h-[1.5rem]">{LOADING_STEPS[step].text}{dots}</p>
+        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div className="h-2 bg-crimson-600 rounded-full transition-all duration-500" style={{ width: `${((step + 1) / LOADING_STEPS.length) * 100}%` }} />
         </div>
       </div>
     </div>
@@ -223,9 +214,9 @@ function MicroReward({ step, onDone }) {
   }, [onDone]);
   if (!r) return null;
   return (
-    <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 border rounded-2xl px-5 py-3 shadow-lg animate-bounce-in flex items-center gap-3 ${r.color}`}>
-      <span className="text-lg">🎉</span>
-      <span className="text-sm font-semibold">{r.msg}</span>
+    <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 border rounded-2xl px-5 py-3 shadow-xl flex items-center gap-3 font-display ${r.color}`}>
+      <Sparkles className="w-5 h-5 text-amber-500" />
+      <span className="text-sm font-bold">{r.msg}</span>
     </div>
   );
 }
@@ -233,11 +224,11 @@ function MicroReward({ step, onDone }) {
 /* ── Step panels ────────────────────────────────────────────────────── */
 function StepPersonal({ form, set }) {
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-4 font-sans">
       <div className="text-center mb-6">
-        <div className="text-5xl mb-2">👤</div>
-        <h2 className="text-2xl font-extrabold text-gray-900">Tell us about yourself</h2>
-        <p className="text-gray-500 text-sm mt-1">Basic info to personalise your recommendations</p>
+        <User className="w-12 h-12 text-navy-600 mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold font-display text-slate-900">Tell us about yourself</h2>
+        <p className="text-slate-500 text-sm mt-1">Basic info to personalise your recommendations</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <input className="input-field" placeholder="Full Name *" value={form.name} onChange={e => set('name', e.target.value)} />
@@ -251,18 +242,18 @@ function StepPersonal({ form, set }) {
 
 function StepEducation({ form, set }) {
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 font-sans">
       <div className="text-center mb-6">
-        <div className="text-5xl mb-2">🎓</div>
-        <h2 className="text-2xl font-extrabold text-gray-900">Academic Background</h2>
-        <p className="text-gray-500 text-sm mt-1">Your education level and scores</p>
+        <GraduationCap className="w-12 h-12 text-navy-600 mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold font-display text-slate-900">Academic Background</h2>
+        <p className="text-slate-500 text-sm mt-1">Your education level and scores</p>
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Highest Education Level</p>
+        <p className="text-sm font-semibold text-slate-700 mb-2 font-display">Highest Education Level</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {EDUCATION_OPTIONS.map(o => (
-            <OptionCard key={o.label} icon={o.icon} label={o.label}
+            <OptionCard key={o.label} label={o.label}
               selected={form.education_level === o.label}
               onClick={() => set('education_level', o.label)} />
           ))}
@@ -271,17 +262,17 @@ function StepEducation({ form, set }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm font-semibold text-gray-700 block mb-1">GPA / Percentage / CGPA</label>
+          <label className="text-sm font-semibold text-slate-700 block mb-1 font-display">GPA / Percentage / CGPA</label>
           <input className="input-field" placeholder="e.g. 75% or 3.5 GPA" value={form.marks} onChange={e => set('marks', e.target.value)} />
         </div>
         <div>
-          <label className="text-sm font-semibold text-gray-700 block mb-1">Field of Interest</label>
+          <label className="text-sm font-semibold text-slate-700 block mb-1 font-display">Field of Interest</label>
           <input className="input-field" placeholder="e.g. Computer Science, MBA" value={form.field_of_interest} onChange={e => set('field_of_interest', e.target.value)} />
         </div>
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">English Proficiency</p>
+        <p className="text-sm font-semibold text-slate-700 mb-2 font-display">English Proficiency</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {ENGLISH_OPTIONS.map(o => (
             <OptionCard key={o.label} label={o.label}
@@ -292,12 +283,12 @@ function StepEducation({ form, set }) {
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-gray-700 block mb-1">Work Experience (years)</label>
+        <label className="text-sm font-semibold text-slate-700 block mb-1 font-display">Work Experience (years)</label>
         <div className="flex items-center gap-4">
           <input type="range" min={0} max={10} value={form.work_experience_years}
             onChange={e => set('work_experience_years', Number(e.target.value))}
-            className="flex-1 accent-primary-600" />
-          <span className="text-primary-700 font-bold w-16 text-center bg-primary-50 rounded-lg py-1">
+            className="flex-1 accent-navy-600" />
+          <span className="text-navy-800 font-bold w-16 text-center bg-navy-50 rounded-lg py-1 font-display">
             {form.work_experience_years} yr{form.work_experience_years !== 1 ? 's' : ''}
           </span>
         </div>
@@ -308,18 +299,18 @@ function StepEducation({ form, set }) {
 
 function StepPreferences({ form, set }) {
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 font-sans">
       <div className="text-center mb-6">
-        <div className="text-5xl mb-2">🌍</div>
-        <h2 className="text-2xl font-extrabold text-gray-900">Your Preferences</h2>
-        <p className="text-gray-500 text-sm mt-1">Budget and destination choices</p>
+        <Globe className="w-12 h-12 text-navy-600 mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold font-display text-slate-900">Your Preferences</h2>
+        <p className="text-slate-500 text-sm mt-1">Budget and destination choices</p>
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Annual Budget (tuition + living)</p>
+        <p className="text-sm font-semibold text-slate-700 mb-2 font-display">Annual Budget (tuition + living)</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {BUDGET_OPTIONS.map(o => (
-            <OptionCard key={o.label} icon={o.icon} label={o.label} tag={o.tag}
+            <OptionCard key={o.label} label={o.label} tag={o.tag}
               selected={form.budget_range === o.label}
               onClick={() => { set('budget_range', o.label); set('budget_value', o.value); }} />
           ))}
@@ -327,7 +318,7 @@ function StepPreferences({ form, set }) {
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Preferred Countries <span className="text-gray-400 font-normal">(pick up to 5)</span></p>
+        <p className="text-sm font-semibold text-slate-700 mb-2 font-display">Preferred Countries <span className="text-slate-400 font-normal">(pick up to 5)</span></p>
         <CountryPicker selected={form.preferred_countries} onChange={v => set('preferred_countries', v)} />
       </div>
     </div>
@@ -336,38 +327,38 @@ function StepPreferences({ form, set }) {
 
 function StepGoals({ form, set }) {
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 font-sans">
       <div className="text-center mb-6">
-        <div className="text-5xl mb-2">🎯</div>
-        <h2 className="text-2xl font-extrabold text-gray-900">Your Goals</h2>
-        <p className="text-gray-500 text-sm mt-1">Timeline and long-term plans</p>
+        <Target className="w-12 h-12 text-navy-600 mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold font-display text-slate-900">Your Goals</h2>
+        <p className="text-slate-500 text-sm mt-1">Timeline and long-term plans</p>
       </div>
 
       <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">When do you plan to start?</p>
+        <p className="text-sm font-semibold text-slate-700 mb-2 font-display">When do you plan to start?</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {INTAKE_OPTIONS.map(o => (
-            <OptionCard key={o.label} icon={o.icon} label={o.label} tag={o.tag}
+            <OptionCard key={o.label} label={o.label} tag={o.tag}
               selected={form.target_intake === o.label}
               onClick={() => set('target_intake', o.label)} />
           ))}
         </div>
       </div>
 
-      <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-4 border border-gray-200 cursor-pointer"
+      <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-4 border border-slate-200 cursor-pointer"
         onClick={() => set('pr_preference', !form.pr_preference)}>
         <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all
-          ${form.pr_preference ? 'bg-primary-600 border-primary-600' : 'border-gray-300'}`}>
-          {form.pr_preference && <span className="text-white text-xs font-bold">✓</span>}
+          ${form.pr_preference ? 'bg-navy-600 border-navy-600' : 'border-slate-300'}`}>
+          {form.pr_preference && <Check className="text-white w-4 h-4 font-bold" />}
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-800">I'm interested in Permanent Residency (PR)</p>
-          <p className="text-xs text-gray-400">We'll prioritise countries with strong PR pathways</p>
+          <p className="text-sm font-semibold text-slate-800 font-display">I'm interested in Permanent Residency (PR)</p>
+          <p className="text-xs text-slate-400">We'll prioritise countries with clear post-study PR pathways</p>
         </div>
       </div>
 
       <div>
-        <label className="text-sm font-semibold text-gray-700 block mb-1">Anything else? <span className="text-gray-400 font-normal">(optional)</span></label>
+        <label className="text-sm font-semibold text-slate-700 block mb-1 font-display">Anything else? <span className="text-slate-400 font-normal">(optional)</span></label>
         <textarea className="input-field resize-none" rows={3}
           placeholder="e.g. I want to work part-time, I have a gap year, specific course in mind…"
           value={form.additional_info} onChange={e => set('additional_info', e.target.value)} />
@@ -398,45 +389,23 @@ export default function Questionnaire() {
       const phone = form.phone.trim();
       const city = form.city.trim();
 
-      // Name validation
       if (!name) return 'Please enter your full name.';
       if (name.length < 3) return 'Name must be at least 3 characters long.';
       if (!/^[a-zA-Z\s'.]{3,50}$/.test(name)) return 'Name should only contain letters and spaces.';
-      if (/(.)\1{3,}/.test(name.toLowerCase()) || /qwerty|asdfgh|zxcvbn|12345/.test(name.toLowerCase())) {
-        return 'Please enter a valid real name (avoid random characters).';
-      }
 
-      // Email validation
       if (!email) return 'Please enter your email address.';
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      if (!emailRegex.test(email)) return 'Please enter a valid email address (e.g. john@example.com).';
+      if (!emailRegex.test(email)) return 'Please enter a valid email address.';
 
-      // Phone validation
       if (!phone) return 'Please enter your phone / WhatsApp number.';
       const digits = phone.replace(/\D/g, '');
       if (digits.length < 7 || digits.length > 15) return 'Please enter a valid phone number (7 to 15 digits).';
 
-      // City validation
       if (city && !/^[a-zA-Z\s,.-]{2,50}$/.test(city)) return 'Please enter a valid city or country name.';
     }
 
     if (step === 1) {
       if (!form.education_level) return 'Please select your education level.';
-
-      // Field of interest validation
-      if (form.field_of_interest.trim() && !/^[a-zA-Z\s,.-]{2,60}$/.test(form.field_of_interest.trim())) {
-        return 'Please enter a valid field of interest (e.g. Computer Science, MBA).';
-      }
-
-      // Marks / GPA validation
-      if (form.marks && form.marks.trim()) {
-        const raw = form.marks.replace('%', '').trim();
-        const num = parseFloat(raw);
-        if (isNaN(num)) return 'Please enter a valid GPA or percentage.';
-        if (num < 1.0 || (num > 4.0 && num < 30) || num > 100) {
-          return 'Please enter a valid academic percentage (30%–100%) or GPA (1.0–4.0).';
-        }
-      }
     }
 
     if (step === 2) {
@@ -450,13 +419,12 @@ export default function Questionnaire() {
     return '';
   };
 
-
   const handleNext = () => {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
     if (step < STEPS.length - 1) {
-      setReward(step + 1);   // show micro-reward for completed step
+      setReward(step + 1);
       setStep(s => s + 1);
       scrollTop();
     }
@@ -493,7 +461,6 @@ export default function Questionnaire() {
       additional_info:       form.additional_info,
     };
 
-
     try {
       const res = await profileRecommend(payload);
       navigate('/results', {
@@ -521,69 +488,66 @@ export default function Questionnaire() {
   const isLast = step === STEPS.length - 1;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 py-12 px-4">
       <div ref={topRef} />
 
-      {/* Micro-reward toast */}
       {reward && <MicroReward step={reward} onDone={() => setReward(null)} />}
 
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-4 py-1.5 rounded-full text-xs font-semibold mb-3">
-            <span className="w-2 h-2 bg-primary-500 rounded-full animate-pulse" />
+        <div className="text-center mb-8 space-y-2">
+          <div className="inline-flex items-center gap-2 bg-navy-50 text-navy-800 border border-navy-200/80 px-4 py-1.5 rounded-full text-xs font-semibold font-display">
+            <Sparkles className="w-3.5 h-3.5 text-crimson-600" />
             Free AI Assessment
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900">Check Your Visa Success Chances</h1>
-          <p className="text-gray-500 text-sm mt-2">Takes about 2 minutes · 100% free · Instant results</p>
+          <h1 className="text-3xl sm:text-4xl font-extrabold font-display text-slate-900">Check Your Visa Success Chances</h1>
+          <p className="text-slate-500 text-sm font-sans">Takes about 2 minutes · 100% free · Instant personalized report</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 sm:p-8">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8">
           <StepIndicator current={step} />
 
-          {/* Step content */}
           {stepComponents[step]}
 
-          {/* Error */}
           {error && (
-            <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
-              <span>⚠️</span> {error}
+            <div className="mt-4 bg-crimson-50 border border-crimson-200 text-crimson-800 text-sm rounded-xl px-4 py-3 flex items-center gap-2 font-sans font-medium">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-crimson-600" /> {error}
             </div>
           )}
 
-          {/* Navigation */}
+          {/* Navigation Buttons */}
           <div className="flex items-center justify-between mt-8 gap-4">
             {step > 0 ? (
               <button type="button" onClick={handleBack}
                 className="btn-outline flex items-center gap-2 text-sm">
-                ← Back
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
             ) : <div />}
 
             {isLast ? (
               <button type="button" onClick={handleSubmit}
-                className="btn-accent flex items-center gap-2 text-sm glow-green">
-                🚀 Get My Results
+                className="btn-accent flex items-center gap-2 text-sm">
+                Get My Results <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button type="button" onClick={handleNext}
                 className="btn-primary flex items-center gap-2 text-sm">
-                Continue → 
+                Continue <ArrowRight className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
 
         {/* Trust badges */}
-        <div className="flex flex-wrap justify-center gap-4 mt-6 text-xs text-gray-400">
-          <span className="flex items-center gap-1">🔒 100% Secure</span>
-          <span className="flex items-center gap-1">⚡ Instant Results</span>
-          <span className="flex items-center gap-1">🎓 500+ Students Guided</span>
-          <span className="flex items-center gap-1">🌍 20+ Countries</span>
+        <div className="flex flex-wrap justify-center gap-6 mt-8 text-xs text-slate-500 font-sans font-medium">
+          <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-emerald-600" /> 100% Secure</span>
+          <span className="flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-navy-600" /> Instant AI Match</span>
+          <span className="flex items-center gap-1.5"><Award className="w-4 h-4 text-crimson-600" /> 500+ Verified Placements</span>
         </div>
       </div>
     </div>
   );
 }
+

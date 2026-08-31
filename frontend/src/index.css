@@ -5,115 +5,92 @@
 
 @layer base {
   html { scroll-behavior: smooth; }
-  body { @apply font-sans text-gray-800 bg-white; }
+  body { @apply font-sans text-slate-800 bg-slate-50/50 antialiased selection:bg-navy-500 selection:text-white; }
+  h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; @apply tracking-tight; }
   * { -webkit-font-smoothing: antialiased; }
 }
 
 @layer utilities {
-  /* Fade in */
-  .animate-fade-in {
-    animation: fadeIn 0.35s ease-out both;
+  /* Gradient Text */
+  .text-gradient-navy {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-navy-800 via-navy-600 to-navy-900;
   }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.96) translateY(12px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+  .text-gradient-crimson {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-crimson-600 via-rose-600 to-crimson-700;
   }
-
-  /* Slide up */
-  .animate-slide-up {
-    animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1) both;
-  }
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(24px); }
-    to   { opacity: 1; transform: translateY(0); }
+  .text-gradient-brand {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-navy-700 via-navy-600 to-crimson-600;
   }
 
-  /* Pop */
-  .animate-pop {
-    animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+  /* Light Glassmorphism */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/80 shadow-xl shadow-slate-200/50 rounded-2xl;
   }
-  @keyframes pop {
-    from { opacity: 0; transform: scale(0.8); }
-    to   { opacity: 1; transform: scale(1); }
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/40 rounded-3xl;
   }
-
-  /* Shimmer skeleton */
-  .animate-shimmer {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-  }
-  @keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+  .glass-pill {
+    @apply bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-full;
   }
 
-  /* Progress bar fill */
-  .progress-fill {
-    transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+  /* Ambient Glows for Light Theme */
+  .ambient-glow-navy {
+    background: radial-gradient(circle, rgba(19, 69, 108, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
+  }
+  .ambient-glow-crimson {
+    background: radial-gradient(circle, rgba(217, 35, 45, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
   }
 
-  /* Checkmark draw */
-  .animate-check {
-    animation: checkDraw 0.4s ease-out 0.1s both;
+  /* Custom Animations */
+  .animate-float-slow {
+    animation: floatSlow 6s ease-in-out infinite;
   }
-  @keyframes checkDraw {
-    from { stroke-dashoffset: 50; opacity: 0; }
-    to   { stroke-dashoffset: 0; opacity: 1; }
-  }
-
-  /* Bounce in */
-  .animate-bounce-in {
-    animation: bounceIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
-  }
-  @keyframes bounceIn {
-    from { opacity: 0; transform: scale(0.5); }
-    to   { opacity: 1; transform: scale(1); }
+  @keyframes floatSlow {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
   }
 
-  /* Pulse glow */
-  .glow-green { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); animation: glowPulse 2s infinite; }
-  @keyframes glowPulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
-    50%      { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+  .animate-pulse-glow {
+    animation: pulseGlow 3s ease-in-out infinite;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
+    @apply bg-navy-600 hover:bg-navy-700 active:scale-[0.98] text-white font-display font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 shadow-lg shadow-navy-600/20 hover:shadow-xl hover:shadow-navy-600/30 hover:-translate-y-0.5 inline-flex items-center justify-center gap-2;
   }
   .btn-accent {
-    @apply bg-accent-500 hover:bg-accent-600 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
+    @apply bg-crimson-600 hover:bg-crimson-700 active:scale-[0.98] text-white font-display font-bold px-6 py-3.5 rounded-xl transition-all duration-200 shadow-lg shadow-crimson-600/25 hover:shadow-xl hover:shadow-crimson-600/35 hover:-translate-y-0.5 inline-flex items-center justify-center gap-2;
   }
   .btn-outline {
-    @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white active:scale-95 font-semibold px-6 py-3 rounded-xl transition-all duration-200;
+    @apply border-2 border-navy-600 text-navy-600 hover:bg-navy-600 hover:text-white active:scale-[0.98] font-display font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 inline-flex items-center justify-center gap-2;
   }
   .btn-green {
-    @apply bg-green-500 hover:bg-green-600 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5;
+    @apply bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-display font-semibold px-6 py-3.5 rounded-xl transition-all duration-200 shadow-lg shadow-emerald-600/20 hover:shadow-xl hover:-translate-y-0.5 inline-flex items-center justify-center gap-2;
   }
   .input-field {
-    @apply w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-0 focus:border-primary-500 transition-all duration-200 bg-white hover:border-gray-300 placeholder-gray-400;
-  }
-  .input-field:focus {
-    @apply shadow-sm;
+    @apply w-full border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-600 transition-all duration-200 bg-white hover:border-slate-300 placeholder-slate-400 font-sans text-slate-800;
   }
   .card {
-    @apply bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-gray-100;
+    @apply bg-white rounded-2xl shadow-sm hover:shadow-xl hover:shadow-slate-200/60 transition-all duration-300 p-6 border border-slate-100;
   }
   .section-title {
-    @apply text-3xl md:text-4xl font-extrabold text-gray-900 mb-4;
+    @apply font-display text-3xl md:text-4xl lg:text-5xl font-extrabold text-slate-900 mb-4 tracking-tight;
   }
   .section-subtitle {
-    @apply text-lg text-gray-500 mb-10 max-w-2xl mx-auto;
+    @apply text-base md:text-lg text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed font-sans;
   }
 
   /* Option card — for clickable choices */
   .option-card {
-    @apply border-2 border-gray-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-primary-500 hover:bg-primary-50 hover:-translate-y-0.5 select-none;
+    @apply border-2 border-slate-200 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:border-navy-500 hover:bg-navy-50/50 hover:-translate-y-0.5 select-none;
   }
 
   .option-card.selected {
-    @apply border-primary-500 bg-primary-50 shadow-sm;
+    @apply border-navy-600 bg-navy-50/80 shadow-sm;
   }
 }
