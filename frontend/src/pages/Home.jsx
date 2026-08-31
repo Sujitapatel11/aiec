@@ -86,130 +86,100 @@ export default function Home() {
   return (
     <div className="overflow-x-hidden bg-slate-50/50">
 
-      {/* ══ 1. HERO SECTION (Light Theme + Cinematic Background Video Showcase) ══ */}
-      <section className="relative min-h-[90vh] flex items-center bg-gradient-to-b from-white via-slate-50/80 to-slate-100/50 pt-8 pb-20 overflow-hidden border-b border-slate-200/60">
-        {/* Soft Ambient Background Light Blowouts */}
-        <div className="absolute top-12 left-1/4 w-96 h-96 bg-navy-600/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-crimson-600/5 rounded-full blur-3xl pointer-events-none" />
+      {/* ══ 1. HERO SECTION (Full-Bleed Cinematic Background Video + Readability Overlay) ══ */}
+      <section className="relative min-h-[85vh] lg:min-h-[90vh] flex items-center overflow-hidden bg-navy-950 text-white border-b border-slate-200/20">
+        
+        {/* ── Background Media Layer (Self-Hosted Video & Poster Fallback) ── */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          {/* Static Poster Image Fallback (Instant load on mobile & slow networks) */}
+          <img
+            src="/hero-poster.jpg"
+            alt="Students Studying Abroad"
+            className="absolute inset-0 w-full h-full object-cover opacity-80 filter brightness-75 contrast-105 desaturate-[0.15]"
+            loading="lazy"
+          />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-          
-          {/* Left Hero Copy (7 Cols) */}
+          {/* Compressed Autoplay Video Background (Local self-hosted asset) */}
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            poster="/hero-poster.jpg"
+            className="absolute inset-0 w-full h-full object-cover z-0 opacity-85 filter brightness-75 contrast-105 desaturate-[0.15]"
+          >
+            <source src="/hero-video.mp4" type="video/mp4" />
+          </video>
+
+          {/* Dual Directional & Vignette Readability Gradient Overlays */}
+          <div className="absolute inset-0 bg-gradient-to-r from-navy-950/95 via-navy-950/80 to-navy-950/45 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-transparent to-navy-950/30 z-10 pointer-events-none" />
+        </div>
+
+        {/* ── Foreground Content Column (Left-Aligned Overlaid Layout) ── */}
+        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-24 w-full">
           <motion.div
-            className="lg:col-span-7 space-y-6 text-slate-900"
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
+            className="max-w-3xl space-y-6 text-white"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <div className="inline-flex items-center gap-2 bg-navy-50/80 border border-navy-200/80 text-navy-800 text-xs font-semibold px-4 py-2 rounded-full shadow-sm font-display">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            {/* Header Pill */}
+            <div className="inline-flex items-center gap-2.5 bg-white/10 border border-white/20 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg font-display">
+              <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
               AI-Powered Guidance · Birgunj Head Office, Nepal
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold font-display text-slate-900 leading-[1.12] tracking-tight">
+            {/* Main Heading */}
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-extrabold font-display text-white tracking-tight leading-[1.1] drop-shadow-md">
               Check Your Study Visa<br />
-              <span className="text-gradient-crimson">
+              <span className="bg-gradient-to-r from-crimson-400 via-rose-300 to-amber-300 bg-clip-text text-transparent">
                 Success Chances
               </span><br />
               in 30 Seconds
             </h1>
 
-            <p className="text-base sm:text-lg text-slate-600 max-w-xl leading-relaxed font-sans">
-              Get personalized country and university recommendations based on your marks, budget, and career goals — free, instant, and AI-analyzed.
+            {/* Subtitle */}
+            <p className="text-base sm:text-xl text-slate-200 max-w-2xl leading-relaxed font-sans font-normal drop-shadow-sm">
+              Get personalized country and university recommendations based on your GPA, budget, and career goals — free, instant, and AI-analyzed.
             </p>
 
-            {/* CTAs */}
+            {/* CTA Button Group */}
             <div className="flex flex-col sm:flex-row gap-4 pt-2">
               <Link
                 to="/apply"
-                className="btn-accent text-base font-bold shadow-lg shadow-crimson-600/25 px-8 py-4 rounded-xl flex items-center justify-center gap-2"
+                className="btn-accent text-base sm:text-lg font-bold shadow-xl shadow-crimson-600/30 px-8 py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform"
               >
-                <Sparkles className="w-5 h-5" />
+                <Sparkles className="w-5 h-5 text-amber-300" />
                 Start Free Assessment
                 <ArrowRight className="w-5 h-5" />
               </Link>
-              
+
               <a
                 href={`https://wa.me/${wa}?text=${encodeURIComponent('Hi! I checked my visa chance and need guidance.')}`}
                 target="_blank"
                 rel="noreferrer"
-                className="btn-green text-base font-semibold shadow-md px-8 py-4 rounded-xl flex items-center justify-center gap-2"
+                className="btn-green text-base sm:text-lg font-semibold shadow-xl px-8 py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform"
               >
                 <MessageSquare className="w-5 h-5 fill-current" />
                 Talk to Expert on WhatsApp
               </a>
             </div>
 
-            {/* Hero Quick Key Highlights */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 border-t border-slate-200/60 font-display">
+            {/* Horizontal Glassmorphism Stat Counters Bar (Overlaid on Background) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pt-8 border-t border-white/20 font-display">
               {STATS.map((s) => (
-                <div key={s.label} className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-navy-700 font-extrabold text-2xl">
-                    <s.icon className="w-5 h-5 text-crimson-600 flex-shrink-0" />
+                <div key={s.label} className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-4 space-y-1 hover:bg-white/10 transition-colors">
+                  <div className="flex items-center gap-2 text-white font-extrabold text-2xl sm:text-3xl">
+                    <s.icon className="w-5 h-5 text-crimson-400 flex-shrink-0" />
                     <span>{s.value}</span>
                   </div>
-                  <p className="text-xs text-slate-500 font-medium font-sans">{s.label}</p>
+                  <p className="text-xs text-slate-300 font-medium font-sans">{s.label}</p>
                 </div>
               ))}
             </div>
           </motion.div>
-
-          {/* Right Hero Cinematic Video Showcase (5 Cols) */}
-          <motion.div
-            className="lg:col-span-5 relative"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="relative rounded-3xl overflow-hidden border border-slate-200/80 shadow-2xl shadow-navy-950/10 group h-[380px] bg-navy-950">
-              {/* Background Poster Image (Fallback for slow connections/mobile) */}
-              <img
-                src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80"
-                alt="Students at Global University Campus"
-                className="absolute inset-0 w-full h-full object-cover opacity-80 transition-opacity duration-700"
-                loading="lazy"
-              />
-
-              {/* Cinematic Autoplay Video Element */}
-              <video
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                poster="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80"
-                className="absolute inset-0 w-full h-full object-cover z-0 opacity-90 transition-transform duration-1000 group-hover:scale-105"
-              >
-                <source src="https://assets.mixkit.co/videos/preview/mixkit-group-of-friends-learning-on-a-laptop-42528-large.mp4" type="video/mp4" />
-              </video>
-
-              {/* Subtle Dark Gradient Overlay for Text Readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-navy-950/90 via-navy-950/40 to-transparent z-10 pointer-events-none" />
-
-              {/* Overlaid Header Badge & Subtitle */}
-              <div className="relative z-20 p-6 flex flex-col justify-between h-full text-white">
-                <div className="flex items-center justify-between">
-                  <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-sm font-display">
-                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
-                    Global Study Experience
-                  </div>
-                  <span className="text-[11px] font-bold text-amber-300 bg-amber-500/20 border border-amber-400/40 px-3 py-1 rounded-full backdrop-blur-md font-display">
-                    Cinematic Showcase
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <h3 className="font-display font-extrabold text-xl text-white tracking-tight">
-                    Transforming Ambitions Into Offers
-                  </h3>
-                  <p className="text-xs text-slate-200 font-sans">
-                    500+ Nepali students guided to top universities in UK, Canada, Australia, USA & Europe.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
         </div>
       </section>
 
