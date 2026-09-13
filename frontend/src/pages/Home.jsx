@@ -87,7 +87,7 @@ export default function Home() {
     <div className="overflow-x-hidden bg-slate-50/50">
 
       {/* ══ 1. HERO SECTION (Full-Bleed Cinematic Background Video + Readability Overlay) ══ */}
-      <section className="relative min-h-[85vh] lg:min-h-[90vh] flex items-center overflow-hidden bg-navy-950 text-white border-b border-slate-200/20">
+      <section className="relative py-24 lg:py-32 overflow-hidden bg-navy-950 text-white border-b border-slate-200/20">
         
         {/* ── Background Media Layer (Self-Hosted Video & Poster Fallback) ── */}
         <div className="absolute inset-0 z-0 overflow-hidden">
@@ -95,7 +95,7 @@ export default function Home() {
           <img
             src="/hero-poster.jpg"
             alt="Students Studying Abroad"
-            className="absolute inset-0 w-full h-full object-cover opacity-80 filter brightness-75 contrast-105 desaturate-[0.15]"
+            className="absolute inset-0 w-full h-full object-cover opacity-90 brightness-95 contrast-100"
             loading="lazy"
           />
 
@@ -107,18 +107,18 @@ export default function Home() {
             playsInline
             preload="metadata"
             poster="/hero-poster.jpg"
-            className="absolute inset-0 w-full h-full object-cover z-0 opacity-85 filter brightness-75 contrast-105 desaturate-[0.15]"
+            className="absolute inset-0 w-full h-full object-cover z-0 opacity-90 brightness-95 contrast-100"
           >
             <source src="/hero-video.mp4" type="video/mp4" />
           </video>
 
-          {/* Dual Directional & Vignette Readability Gradient Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-r from-navy-950/95 via-navy-950/80 to-navy-950/45 z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-transparent to-navy-950/30 z-10 pointer-events-none" />
+          {/* Mobile & Desktop Readability Gradient Overlays */}
+          <div className="absolute inset-0 bg-gradient-to-b from-navy-950/80 via-navy-950/55 to-navy-950/30 lg:bg-gradient-to-r lg:from-navy-950/85 lg:via-navy-950/50 lg:to-transparent z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-navy-950/80 to-transparent z-10 pointer-events-none" />
         </div>
 
         {/* ── Foreground Content Column (Left-Aligned Overlaid Layout) ── */}
-        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-24 w-full">
+        <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <motion.div
             className="max-w-3xl space-y-6 text-white"
             initial={{ opacity: 0, y: 20 }}
@@ -132,16 +132,16 @@ export default function Home() {
             </div>
 
             {/* Main Heading */}
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-extrabold font-display text-white tracking-tight leading-[1.1] drop-shadow-md">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.15] text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.45)] font-display">
               Check Your Study Visa<br />
-              <span className="bg-gradient-to-r from-crimson-400 via-rose-300 to-amber-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-rose-400 via-amber-300 to-amber-200 bg-clip-text text-transparent drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]">
                 Success Chances
               </span><br />
               in 30 Seconds
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-xl text-slate-200 max-w-2xl leading-relaxed font-sans font-normal drop-shadow-sm">
+            <p className="text-base sm:text-lg lg:text-xl text-slate-100 font-medium max-w-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)] leading-relaxed font-sans">
               Get personalized country and university recommendations based on your GPA, budget, and career goals — free, instant, and AI-analyzed.
             </p>
 
@@ -170,7 +170,7 @@ export default function Home() {
             {/* Horizontal Glassmorphism Stat Counters Bar (Overlaid on Background) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pt-8 border-t border-white/20 font-display">
               {STATS.map((s) => (
-                <div key={s.label} className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-4 space-y-1 hover:bg-white/10 transition-colors">
+                <div key={s.label} className="bg-white/[0.10] border border-white/20 backdrop-blur-md rounded-xl px-4 py-3 sm:px-5 sm:py-4 hover:bg-white/[0.15] transition-all duration-300 space-y-1">
                   <div className="flex items-center gap-2 text-white font-extrabold text-2xl sm:text-3xl">
                     <s.icon className="w-5 h-5 text-crimson-400 flex-shrink-0" />
                     <span>{s.value}</span>
