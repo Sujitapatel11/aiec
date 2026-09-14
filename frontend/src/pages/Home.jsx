@@ -1,5 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   GraduationCap,
@@ -69,6 +69,7 @@ export default function Home() {
   const [contactLoading, setContactLoading] = useState(false);
   const [activeCardId, setActiveCardId] = useState(null);
   const wa = import.meta.env.VITE_WHATSAPP || '919802020575';
+  const navigate = useNavigate();
 
   const handleContact = async (e) => {
     e.preventDefault();
@@ -326,7 +327,7 @@ export default function Home() {
                   country={c}
                   activeCardId={activeCardId}
                   onHover={setActiveCardId}
-                  onClick={() => window.location.href = '/apply'}
+                  onClick={() => navigate(`/country/${c.id}`)}
                 />
               </motion.div>
             ))}
