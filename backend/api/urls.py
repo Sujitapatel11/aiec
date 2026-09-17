@@ -19,4 +19,13 @@ urlpatterns = [
     path('auth/users/', views.manage_users),
     path('auth/users/<int:user_id>/', views.manage_user_detail),
     path('chat/', views.chat_counsellor),
+    # Student Enrollment & Process Tracking
+    path('students/enroll/', views.enroll_student),
+    path('students/', views.manage_students),
+    path('students/<int:pk>/', views.manage_student_detail),
+    path('students/<int:student_id>/steps/', views.add_process_step),
+    path('steps/<int:step_id>/', views.manage_process_step_detail),
+    path('steps/<int:step_id>/payments/', views.add_step_payment),
+    path('student-portal/my-profile/', views.student_portal_me),
 ]
+

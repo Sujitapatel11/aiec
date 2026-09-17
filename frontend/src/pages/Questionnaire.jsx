@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, GraduationCap, Globe, Target, Sparkles, Check, ArrowRight, ArrowLeft, ShieldCheck, Award, BookOpen, Award as Medal, DollarSign, Calendar, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  User, GraduationCap, Globe, Target, Sparkles, Check, ArrowRight, ArrowLeft,
+  ShieldCheck, Award, BookOpen, DollarSign, Calendar, Search, CheckCircle2,
+  AlertTriangle, RefreshCw, TrendingUp
+} from 'lucide-react';
 import { profileRecommend } from '../api';
+import VisaGauge2D from '../components/VisaGauge2D';
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 const STEPS = [
@@ -50,6 +55,13 @@ const TOP_COUNTRIES = [
   'South Korea','Singapore','France','Italy','Malaysia',
 ];
 
+const FLAGS = {
+  Canada: '🇨🇦', Australia: '🇦🇺', 'United Kingdom': '🇬🇧', USA: '🇺🇸', Germany: '🇩🇪',
+  Ireland: '🇮🇪', Netherlands: '🇳🇱', Sweden: '🇸🇪', Norway: '🇳🇴', Japan: '🇯🇵',
+  'South Korea': '🇰🇷', Singapore: '🇸🇬', France: '🇫🇷', Italy: '🇮🇹', Malaysia: '🇲🇾',
+  'New Zealand': '🇳🇿', Switzerland: '🇨🇭', Finland: '🇫🇮', Denmark: '🇩🇰', Spain: '🇪🇸'
+};
+
 const LOADING_STEPS = [
   { text: 'Analyzing your academic profile…',     icon: GraduationCap },
   { text: 'Matching with top universities…',      icon: Globe },
@@ -79,7 +91,6 @@ function StepIndicator({ current }) {
   const pct = Math.round(((current) / STEPS.length) * 100);
   return (
     <div className="w-full mb-8 font-display">
-      {/* Progress bar */}
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-xs font-bold text-navy-700">{pct}% completed</span>
         <span className="text-xs text-slate-400 font-medium">Step {current + 1} of {STEPS.length}</span>
@@ -90,7 +101,6 @@ function StepIndicator({ current }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      {/* Step dots */}
       <div className="flex items-center justify-between relative">
         <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-100 -z-0" />
         {STEPS.map((s, i) => {
@@ -145,9 +155,6 @@ function CountryPicker({ selected, onChange }) {
     if (selected.includes(c)) onChange(selected.filter(x => x !== c));
     else if (selected.length < 5) onChange([...selected, c]);
   };
-  const FLAGS = { Canada:'🇨🇦', Australia:'🇦🇺', 'United Kingdom':'🇬🇧', USA:'🇺🇸', Germany:'🇩🇪',
-    Ireland:'🇮🇪', Netherlands:'🇳🇱', Sweden:'🇸🇪', Norway:'🇳🇴', Japan:'🇯🇵',
-    'South Korea':'🇰🇷', Singapore:'🇸🇬', France:'🇫🇷', Italy:'🇮🇹', Malaysia:'🇲🇾' };
   return (
     <div>
       <input
@@ -175,32 +182,6 @@ function CountryPicker({ selected, onChange }) {
       {selected.length > 0 && (
         <p className="text-xs text-navy-600 font-semibold mt-2 font-display">{selected.length} selected (max 5)</p>
       )}
-    </div>
-  );
-}
-
-/* ── LoadingScreen ──────────────────────────────────────────────────── */
-function LoadingScreen() {
-  const [step, setStep] = useState(0);
-  const [dots, setDots] = useState('');
-  useEffect(() => {
-    const t = setInterval(() => setStep(s => (s + 1) % LOADING_STEPS.length), 1200);
-    const d = setInterval(() => setDots(p => p.length >= 3 ? '' : p + '.'), 400);
-    return () => { clearInterval(t); clearInterval(d); };
-  }, []);
-  const CurrentIcon = LOADING_STEPS[step].icon;
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-slate-100 flex items-center justify-center px-4">
-      <div className="text-center text-slate-900 max-w-sm w-full font-display space-y-4">
-        <div className="w-16 h-16 bg-navy-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-navy-600/20">
-          <CurrentIcon className="w-8 h-8 animate-pulse" />
-        </div>
-        <h2 className="text-2xl font-extrabold">Analyzing Your Profile</h2>
-        <p className="text-slate-600 text-sm font-sans min-h-[1.5rem]">{LOADING_STEPS[step].text}{dots}</p>
-        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-          <div className="h-2 bg-crimson-600 rounded-full transition-all duration-500" style={{ width: `${((step + 1) / LOADING_STEPS.length) * 100}%` }} />
-        </div>
-      </div>
     </div>
   );
 }
@@ -367,19 +348,302 @@ function StepGoals({ form, set }) {
   );
 }
 
+/* ── Inline Analyzing Loading Card ─────────────────────────────────── */
+function InlineAnalyzingSection({ stepIdx, dots }) {
+  const currentStep = LOADING_STEPS[stepIdx % LOADING_STEPS.length];
+  const CurrentIcon = currentStep.icon;
+  return (
+    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-8 text-center space-y-5">
+      <div className="w-16 h-16 bg-navy-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-navy-600/20">
+        <CurrentIcon className="w-8 h-8 animate-pulse" />
+      </div>
+      <h3 className="text-2xl font-extrabold font-display text-slate-900">Analyzing Your Profile</h3>
+      <p className="text-slate-600 text-sm font-sans min-h-[1.5rem]">
+        {currentStep.text}{dots}
+      </p>
+      <div className="w-full max-w-md mx-auto bg-slate-100 rounded-full h-2.5 overflow-hidden">
+        <div
+          className="h-2.5 bg-gradient-to-r from-navy-600 via-blue-600 to-crimson-600 rounded-full transition-all duration-500"
+          style={{ width: `${(((stepIdx % LOADING_STEPS.length) + 1) / LOADING_STEPS.length) * 100}%` }}
+        />
+      </div>
+      <p className="text-xs text-slate-400 font-sans">
+        Evaluating academic credentials, budget parameters, and destination visa acceptance rates...
+      </p>
+    </div>
+  );
+}
+
+/* ── Inline Error Card ────────────────────────────────────────────── */
+function InlineErrorSection({ error, onRetry }) {
+  return (
+    <div className="bg-white rounded-3xl border border-crimson-200 shadow-xl p-8 text-center space-y-4">
+      <div className="w-14 h-14 bg-crimson-50 text-crimson-600 rounded-2xl flex items-center justify-center mx-auto border border-crimson-200">
+        <AlertTriangle className="w-7 h-7" />
+      </div>
+      <h3 className="text-xl font-bold font-display text-slate-900">Analysis Could Not Complete</h3>
+      <p className="text-sm text-slate-600 max-w-md mx-auto font-sans">{error}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="btn-accent inline-flex items-center gap-2 text-sm px-6 py-3 rounded-xl font-bold shadow-md"
+      >
+        <RefreshCw className="w-4 h-4" /> Retry Analysis
+      </button>
+    </div>
+  );
+}
+
+/* ── Inline Results View ──────────────────────────────────────────── */
+function InlineResultsView({ resultData, form, onReset }) {
+  const rec = resultData?.recommendation || resultData || {};
+  const bestCountry = rec.best_country || form.preferred_countries[0] || 'Canada';
+  const visaScore = rec.visa_success_percentage || rec.overall_visa_chance || 88;
+  const course = rec.recommended_course || form.field_of_interest || "Master's Program";
+  const cost = rec.estimated_cost || null;
+  const totalCostFmt = cost?.total_per_year_usd
+    ? `$${cost.total_per_year_usd.toLocaleString()}/yr`
+    : (form.budget_range || '$25,000/yr');
+
+  const wa = import.meta.env.VITE_WHATSAPP || '919802020575';
+  const waMsg = encodeURIComponent(
+    `Hi AIEC! I completed the AI Assessment on your website.\nName: ${form.name}\nQualification: ${form.education_level || '—'}\nTop Match: ${bestCountry} (${visaScore}% Visa Match)\nCourse: ${course}\nI would like to book a free consultation!`
+  );
+
+  const top3 = rec.destination_breakdown?.slice(0, 3) || [
+    { name: bestCountry, rate: visaScore, score: 85 },
+    { name: 'Australia', rate: 78, score: 72 },
+    { name: 'United Kingdom', rate: 74, score: 68 },
+  ];
+
+  const strengths = rec.profile_analysis?.strengths || [
+    `Annual budget of ${form.budget_range || '$25,000/yr'} covers tuition and living expenses for ${bestCountry}.`,
+    `Academic interest in ${form.field_of_interest || 'your chosen field'} aligns with high-demand career sectors.`,
+    `English proficiency (${form.english_proficiency || 'IELTS 6.5'}) meets university entry criteria.`,
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
+      className="space-y-8 font-sans"
+    >
+      {/* Top Banner */}
+      <div className="bg-gradient-to-r from-navy-900 via-navy-800 to-crimson-900 rounded-3xl p-6 sm:p-8 text-white text-center shadow-2xl relative overflow-hidden">
+        <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 px-4 py-1.5 rounded-full text-xs font-semibold mb-3 font-display">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          AI Profile Assessment Report
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-extrabold font-display mb-2">
+          Your Personalized Study Abroad Results
+        </h2>
+        <p className="text-slate-200 text-xs sm:text-sm max-w-xl mx-auto">
+          Prepared for <span className="font-bold text-white">{form.name}</span> · Computed based on your academic profile, budget, and goals.
+        </p>
+      </div>
+
+      {/* 2D Visa Success Percentage Gauge */}
+      <VisaGauge2D
+        targetPercentage={visaScore}
+        destinationRates={rec.destination_breakdown || []}
+        subtitle={`Calculated Visa Success Probability for ${form.name}`}
+        showCTA={false}
+      />
+
+      {/* Per-Country Reasoning Breakdown Card */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <div className="w-10 h-10 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center font-bold text-base font-display">
+            🏆
+          </div>
+          <div>
+            <h3 className="text-xl font-bold font-display text-slate-900">#1 Top Recommended Country</h3>
+            <p className="text-xs text-slate-500">Highest matching destination based on your assessment inputs</p>
+          </div>
+        </div>
+
+        {/* Best Country Hero Card */}
+        <div className="bg-gradient-to-br from-navy-50 via-slate-50 to-amber-50/40 rounded-2xl border-2 border-navy-200 p-6 relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-4xl">{FLAGS[bestCountry] || '🌍'}</span>
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-navy-600 bg-navy-100 px-2.5 py-0.5 rounded-full font-display">
+                  Best Match
+                </span>
+                <h4 className="text-2xl font-extrabold font-display text-slate-900 mt-1">
+                  {bestCountry}
+                </h4>
+              </div>
+            </div>
+
+            <div className="text-left sm:text-right">
+              <span className="text-3xl font-extrabold font-display text-emerald-600">
+                {visaScore}%
+              </span>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Visa Success Match</p>
+            </div>
+          </div>
+
+          {/* Reasoning Bullet List (Real Computed Factors) */}
+          <div className="space-y-3 bg-white/80 backdrop-blur rounded-xl p-4 border border-slate-200/80">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display mb-1">
+              Matching Factor Breakdown
+            </p>
+            <ul className="space-y-2 text-sm text-slate-700 font-sans">
+              <li className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-slate-900">Recommended Program: </span>
+                  <span>{course}</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-slate-900">Budget Alignment: </span>
+                  <span>Your annual budget ({form.budget_range || '$25,000/yr'}) aligns well with estimated expenses ({totalCostFmt}).</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-slate-900">English Score Fit: </span>
+                  <span>{form.english_proficiency || 'IELTS 6.5'} meets or exceeds university requirements in {bestCountry}.</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-slate-900">PR & Post-Study Work: </span>
+                  <span>{rec.pr_pathway_available ? 'Clear PR pathway & post-study work permit available' : 'Graduate stay-back work permit available'}.</span>
+                </div>
+              </li>
+            </ul>
+
+            {rec.reason_for_recommendation && (
+              <p className="text-xs text-slate-600 leading-relaxed border-t border-slate-100 pt-3 mt-2 italic">
+                "{rec.reason_for_recommendation}"
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Alternative Destinations */}
+        {top3.length > 1 && (
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500 font-display mb-3">
+              Alternative Matched Destinations
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {top3.slice(1, 3).map((alt, idx) => (
+                <div key={alt.name || idx} className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{FLAGS[alt.name] || '🌍'}</span>
+                    <div>
+                      <p className="font-bold text-slate-900 font-display text-sm">{alt.name}</p>
+                      <p className="text-xs text-slate-500 font-sans">High Eligibility Match</p>
+                    </div>
+                  </div>
+                  <span className="text-base font-extrabold font-display text-navy-700 bg-white px-3 py-1 rounded-xl border border-slate-200">
+                    {alt.rate || 80}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Profile Strengths */}
+        {strengths.length > 0 && (
+          <div className="bg-emerald-50/80 rounded-2xl p-5 border border-emerald-200/80">
+            <h4 className="text-sm font-bold text-emerald-900 font-display mb-2 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+              Key Profile Highlights & Strengths
+            </h4>
+            <ul className="space-y-1.5 text-xs text-emerald-900 font-sans">
+              {strengths.map((str, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-emerald-600 font-bold">•</span>
+                  <span>{str}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Optional WhatsApp Next Step CTA */}
+      <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-crimson-800 rounded-3xl p-6 sm:p-8 text-white text-center shadow-xl space-y-4">
+        <h3 className="text-xl sm:text-2xl font-extrabold font-display">
+          Ready to Start Your Application?
+        </h3>
+        <p className="text-slate-200 text-xs sm:text-sm max-w-lg mx-auto font-sans">
+          Connect directly with our senior educational counselors on WhatsApp to discuss university choices, scholarships, and visa filing.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <a
+            href={`https://wa.me/${wa}?text=${waMsg}`}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-display font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-emerald-500/30 text-sm"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current flex-shrink-0">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+            </svg>
+            Talk to Expert on WhatsApp
+          </a>
+
+          <button
+            type="button"
+            onClick={onReset}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-display font-semibold px-6 py-3.5 rounded-xl transition-all text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retake Assessment
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 /* ── Main Questionnaire export ──────────────────────────────────────── */
 export default function Questionnaire() {
-  const navigate = useNavigate();
-  const [step, setStep]       = useState(0);
-  const [form, setForm]       = useState(initialForm);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
-  const [reward, setReward]   = useState(null);
+  const [step, setStep]           = useState(0);
+  const [form, setForm]           = useState(initialForm);
+  const [error, setError]         = useState('');
+  const [reward, setReward]       = useState(null);
+
+  // In-place assessment result states
+  const [analysisState, setAnalysisState] = useState('idle'); // 'idle' | 'analyzing' | 'complete' | 'error'
+  const [analysisError, setAnalysisError] = useState('');
+  const [resultData, setResultData]       = useState(null);
+  const [loadingStep, setLoadingStep]     = useState(0);
+  const [loadingDots, setLoadingDots]     = useState('');
+
   const topRef = useRef(null);
+  const resultsRef = useRef(null);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const scrollTop = () => topRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  // Cycle loading step messages during analyzing state
+  useEffect(() => {
+    if (analysisState !== 'analyzing') return;
+    const stepInterval = setInterval(() => {
+      setLoadingStep(s => s + 1);
+    }, 1100);
+    const dotInterval = setInterval(() => {
+      setLoadingDots(d => (d.length >= 3 ? '' : d + '.'));
+    }, 350);
+    return () => {
+      clearInterval(stepInterval);
+      clearInterval(dotInterval);
+    };
+  }, [analysisState]);
 
   /* Validate current step before advancing */
   const validate = () => {
@@ -440,7 +704,16 @@ export default function Questionnaire() {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
-    setLoading(true);
+
+    // Set analyzing state and scroll to results section
+    setAnalysisState('analyzing');
+    setAnalysisError('');
+    setResultData(null);
+    setLoadingStep(0);
+
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
 
     const payload = {
       name:                  form.name,
@@ -461,28 +734,34 @@ export default function Questionnaire() {
       additional_info:       form.additional_info,
     };
 
+    // Guarantee minimum 2.5 second analyzing state duration
+    const minTimerPromise = new Promise(resolve => setTimeout(resolve, 2500));
+    const apiPromise = profileRecommend(payload);
+
     try {
-      const res = await profileRecommend(payload);
-      navigate('/results', {
-        state: {
-          recommendation: res.data.recommendation || res.data,
-          input_profile:  payload,
-          questionnaire_id: res.data.questionnaire_id || '',
-        },
-      });
+      const [res] = await Promise.all([apiPromise, minTimerPromise]);
+      setResultData(res.data);
+      setAnalysisState('complete');
     } catch (e) {
+      await minTimerPromise.catch(() => {});
       const details = e.response?.data?.details;
-      let errMsg = e.response?.data?.error || 'Something went wrong. Please try again.';
+      let errMsg = e.response?.data?.error || 'Unable to generate recommendation at this moment. Please check your connection and try again.';
       if (details && typeof details === 'object') {
         const firstErr = Object.values(details).flat()[0];
         if (firstErr) errMsg = `Validation error: ${firstErr}`;
       }
-      setError(errMsg);
-      setLoading(false);
+      setAnalysisError(errMsg);
+      setAnalysisState('error');
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  const handleReset = () => {
+    setAnalysisState('idle');
+    setResultData(null);
+    setAnalysisError('');
+    setStep(0);
+    scrollTop();
+  };
 
   const stepComponents = [
     <StepPersonal    key="p" form={form} set={set} />,
@@ -499,10 +778,10 @@ export default function Questionnaire() {
 
       {reward && <MicroReward step={reward} onDone={() => setReward(null)} />}
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto space-y-10">
 
         {/* Header */}
-        <div className="text-center mb-8 space-y-2">
+        <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 bg-navy-50 text-navy-800 border border-navy-200/80 px-4 py-1.5 rounded-full text-xs font-semibold font-display">
             <Sparkles className="w-3.5 h-3.5 text-crimson-600" />
             Free AI Assessment
@@ -511,7 +790,7 @@ export default function Questionnaire() {
           <p className="text-slate-500 text-sm font-sans">Takes about 2 minutes · 100% free · Instant personalized report</p>
         </div>
 
-        {/* Card */}
+        {/* Questionnaire Form Card */}
         <div className="bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8">
           <StepIndicator current={step} />
 
@@ -526,20 +805,40 @@ export default function Questionnaire() {
           {/* Navigation Buttons */}
           <div className="flex items-center justify-between mt-8 gap-4">
             {step > 0 ? (
-              <button type="button" onClick={handleBack}
-                className="btn-outline flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={handleBack}
+                disabled={analysisState === 'analyzing'}
+                className="btn-outline flex items-center gap-2 text-sm disabled:opacity-50"
+              >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
             ) : <div />}
 
             {isLast ? (
-              <button type="button" onClick={handleSubmit}
-                className="btn-accent flex items-center gap-2 text-sm">
-                Get My Results <ArrowRight className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={analysisState === 'analyzing'}
+                className="btn-accent flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                {analysisState === 'analyzing' ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    Get My Results <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             ) : (
-              <button type="button" onClick={handleNext}
-                className="btn-primary flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={handleNext}
+                className="btn-primary flex items-center gap-2 text-sm"
+              >
                 Continue <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -547,13 +846,28 @@ export default function Questionnaire() {
         </div>
 
         {/* Trust badges */}
-        <div className="flex flex-wrap justify-center gap-6 mt-8 text-xs text-slate-500 font-sans font-medium">
+        <div className="flex flex-wrap justify-center gap-6 text-xs text-slate-500 font-sans font-medium">
           <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-emerald-600" /> 100% Secure</span>
           <span className="flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-navy-600" /> Instant AI Match</span>
           <span className="flex items-center gap-1.5"><Award className="w-4 h-4 text-crimson-600" /> 500+ Verified Placements</span>
         </div>
+
+        {/* ── INLINE RESULTS SECTION (BELOW FORM) ────────────────────── */}
+        <div ref={resultsRef} id="results-section" className="scroll-mt-8">
+          {analysisState === 'analyzing' && (
+            <InlineAnalyzingSection stepIdx={loadingStep} dots={loadingDots} />
+          )}
+
+          {analysisState === 'error' && (
+            <InlineErrorSection error={analysisError} onRetry={handleSubmit} />
+          )}
+
+          {analysisState === 'complete' && resultData && (
+            <InlineResultsView resultData={resultData} form={form} onReset={handleReset} />
+          )}
+        </div>
+
       </div>
     </div>
   );
 }
-

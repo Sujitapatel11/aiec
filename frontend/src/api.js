@@ -50,4 +50,16 @@ export const getLead           = (id)       => api.get(`/leads/${id}/`)
 export const updateLead        = (id, data) => api.patch(`/leads/${id}/`, data)
 export const getDashboardStats = ()         => api.get('/dashboard/stats/')
 
+// Student Enrollment & Process Tracking
+export const enrollStudent        = (data)           => api.post('/students/enroll/', data)
+export const getStudents          = ()               => api.get('/students/')
+export const getStudentDetail     = (id)             => api.get(`/students/${id}/`)
+export const deleteStudent        = (id)             => api.delete(`/students/${id}/`)
+export const addProcessStep       = (studentId, data)=> api.post(`/students/${studentId}/steps/`, data)
+export const updateProcessStep    = (stepId, data)   => api.patch(`/steps/${stepId}/`, data)
+export const deleteProcessStep    = (stepId)         => api.delete(`/steps/${stepId}/`)
+export const addStepPayment       = (stepId, data)   => api.post(`/steps/${stepId}/payments/`, data)
+export const getStudentPortalMe   = ()               => api.get('/student-portal/my-profile/')
+
 export default api
+

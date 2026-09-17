@@ -5,18 +5,26 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.db.models import Count
-from .models import Lead, Questionnaire, Country, Course
+import secrets
+
+from .models import (
+    Lead, Questionnaire, Country, Course,
+    StudentProfile, ProcessStep, Payment, DEFAULT_CHECKLIST_TEMPLATE
+)
 from .serializers import (
     LeadSerializer, LeadDetailSerializer,
     QuestionnaireSerializer, QuestionnaireCreateSerializer,
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
+    StudentProfileSerializer, StudentEnrollmentSerializer,
+    ProcessStepSerializer, PaymentSerializer
 )
 from .ai_service import get_ai_recommendations
 from .recommendation_service import get_profile_recommendation
 from .chat_service import get_chat_response
 from .notify import send_lead_notification
-from django.contrib.auth.models import User
+from .whatsapp_service import send_step_completion_whatsapp
+from django.contrib.auth.models import User, Group
 import threading
 
 
@@ -102,7 +110,7 @@ def admin_login(request):
     # Determine actual_role explicitly
     if user.is_superuser:
         actual_role = 'admin'
-    elif user.groups.filter(name='Staff').exists():
+    elif user.is_staff or user.groups.filter(name='Staff').exists():
         actual_role = 'staff'
     elif user.groups.filter(name='Student').exists():
         actual_role = 'student'
@@ -322,6 +330,9 @@ def manage_users(request):
         email=email, first_name=first_name, last_name=last_name,
         is_staff=True, is_superuser=(role == 'admin'), is_active=True,
     )
+    if role == 'staff':
+        staff_group, _ = Group.objects.get_or_create(name='Staff')
+        user.groups.add(staff_group)
     return Response({
         'id': user.id, 'username': user.username,
         'name': user.get_full_name() or user.username,
@@ -361,6 +372,9 @@ def manage_user_detail(request, user_id):
             user.is_active = request.data['is_active']
         if 'role' in request.data:
             user.is_superuser = request.data['role'] == 'admin'
+            if request.data['role'] == 'staff':
+                staff_group, _ = Group.objects.get_or_create(name='Staff')
+                user.groups.add(staff_group)
         if 'password' in request.data and request.data['password']:
             if len(request.data['password']) < 6:
                 return Response({'error': 'Password must be at least 6 characters.'}, status=400)
@@ -390,3 +404,269 @@ def manage_user_detail(request, user_id):
         user.save()
         Token.objects.filter(user=user).delete()
         return Response({'message': f'"{user.username}" has been deactivated.'})
+
+
+# ── Student Enrollment & Process Tracking Views ────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def enroll_student(request):
+    """
+    Enroll a new student. Accessible to Admin + Staff.
+    Creates User (Student role) + StudentProfile + 7 default ProcessStep rows.
+    Generates a secure password and returns it ONCE in response.
+    Never stores or logs password in plaintext.
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = StudentEnrollmentSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+
+    # Generate secure random password
+    generated_password = secrets.token_urlsafe(8) + "!"
+
+    # Create User with Student role
+    user = User.objects.create_user(
+        username=data['username'],
+        email=data['email'],
+        password=generated_password,
+        first_name=data['full_name'].split()[0] if data['full_name'] else '',
+        last_name=' '.join(data['full_name'].split()[1:]) if len(data['full_name'].split()) > 1 else '',
+        is_staff=False,
+        is_superuser=False,
+        is_active=True
+    )
+    student_group, _ = Group.objects.get_or_create(name='Student')
+    user.groups.add(student_group)
+
+    # Create StudentProfile
+    profile = StudentProfile.objects.create(
+        user=user,
+        full_name=data['full_name'],
+        phone=data['phone'],
+        destination_country=data['destination_country'],
+        enrolled_by=request.user,
+        notes=data.get('notes', '')
+    )
+
+    # Auto-create default checklist steps
+    for item in DEFAULT_CHECKLIST_TEMPLATE:
+        ProcessStep.objects.create(
+            student=profile,
+            step_name=item['step_name'],
+            status='pending',
+            estimated_cost=0.00,
+            order=item['order']
+        )
+
+    # Return profile data + generated password ONCE (never logged in plaintext)
+    return Response({
+        'id': profile.id,
+        'user_id': user.id,
+        'username': user.username,
+        'full_name': profile.full_name,
+        'email': user.email,
+        'phone': profile.phone,
+        'destination_country': profile.destination_country,
+        'generated_password': generated_password,
+        'message': f"Student '{profile.full_name}' enrolled successfully."
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manage_students(request):
+    """List all enrolled students. Accessible to Admin + Staff."""
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    students = StudentProfile.objects.all().order_by('-created_at')
+    serializer = StudentProfileSerializer(students, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_student_detail(request, pk):
+    """
+    Get student detail (Admin + Staff) or Delete student record (Admin ONLY).
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        student = StudentProfile.objects.get(pk=pk)
+    except StudentProfile.DoesNotExist:
+        return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = StudentProfileSerializer(student)
+        return Response(serializer.data)
+
+    if request.method == 'DELETE':
+        # DELETE IS ADMIN ONLY (least-privilege rule)
+        if not request.user.is_superuser:
+            return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+
+        user = student.user
+        student.delete()
+        if user:
+            user.delete()
+        return Response({'message': 'Student record deleted successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_process_step(request, student_id):
+    """Add custom process step to a student. Admin + Staff."""
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        student = StudentProfile.objects.get(pk=student_id)
+    except StudentProfile.DoesNotExist:
+        return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    step_name = request.data.get('step_name', '').strip()
+    if not step_name:
+        return Response({'error': 'Step name is required.'}, status=400)
+
+    estimated_cost = request.data.get('estimated_cost', 0.00)
+    due_date = request.data.get('due_date', None) or None
+    notes = request.data.get('notes', '')
+
+    max_order = student.process_steps.all().count()
+
+    step = ProcessStep.objects.create(
+        student=student,
+        step_name=step_name,
+        status='pending',
+        estimated_cost=estimated_cost,
+        due_date=due_date,
+        notes=notes,
+        order=max_order + 1
+    )
+
+    return Response(ProcessStepSerializer(step).data, status=201)
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_process_step_detail(request, step_id):
+    """
+    Update step (Admin + Staff) or Delete step (Admin ONLY).
+    Triggers WhatsApp completion notification when status changes to 'completed'.
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        step = ProcessStep.objects.get(pk=step_id)
+    except ProcessStep.DoesNotExist:
+        return Response({'error': 'Process step not found.'}, status=404)
+
+    if request.method == 'DELETE':
+        # DELETE IS ADMIN ONLY
+        if not request.user.is_superuser:
+            return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+
+        step.delete()
+        return Response({'message': 'Process step deleted successfully.'})
+
+    if request.method == 'PATCH':
+        old_status = step.status
+        new_status = request.data.get('status', step.status)
+
+        if 'status' in request.data:
+            step.status = new_status
+            if new_status == 'completed' and old_status != 'completed':
+                from django.utils.timezone import now
+                step.completed_at = now()
+
+        if 'step_name' in request.data:
+            step.step_name = request.data['step_name']
+        if 'estimated_cost' in request.data:
+            step.estimated_cost = request.data['estimated_cost']
+        if 'due_date' in request.data:
+            step.due_date = request.data['due_date'] or None
+        if 'notes' in request.data:
+            step.notes = request.data['notes']
+        if 'order' in request.data:
+            step.order = request.data['order']
+
+        step.save()
+
+        # WhatsApp Notification Trigger on Completion
+        whatsapp_result = None
+        if new_status == 'completed' and old_status != 'completed':
+            student = step.student
+            # Find next pending step for message
+            next_step = ProcessStep.objects.filter(
+                student=student,
+                order__gt=step.order,
+                status__in=['pending', 'in_progress']
+            ).order_by('order').first()
+
+            next_step_name = next_step.step_name if next_step else "Pre-departure / Visa Issuance"
+
+            whatsapp_result = send_step_completion_whatsapp(
+                student_name=student.full_name,
+                phone=student.phone,
+                step_name=step.step_name,
+                next_step_name=next_step_name
+            )
+
+        resp_data = ProcessStepSerializer(step).data
+        if whatsapp_result:
+            resp_data['whatsapp_notification'] = whatsapp_result
+
+        return Response(resp_data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_step_payment(request, step_id):
+    """Record a partial or full payment against a process step. Admin + Staff."""
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        step = ProcessStep.objects.get(pk=step_id)
+    except ProcessStep.DoesNotExist:
+        return Response({'error': 'Process step not found.'}, status=404)
+
+    amount = request.data.get('amount', None)
+    if amount is None or float(amount) <= 0:
+        return Response({'error': 'Payment amount must be greater than 0.'}, status=400)
+
+    notes = request.data.get('notes', '')
+
+    payment = Payment.objects.create(
+        step=step,
+        amount=amount,
+        recorded_by=request.user,
+        notes=notes
+    )
+
+    return Response(PaymentSerializer(payment).data, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def student_portal_me(request):
+    """
+    Read-only view for logged-in Student restricted strictly to request.user at the query level.
+    Returns student profile, ordered checklist steps, and total payment summary.
+    """
+    try:
+        profile = StudentProfile.objects.get(user=request.user)
+    except StudentProfile.DoesNotExist:
+        return Response({'error': 'Student profile not found for current user.'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = StudentProfileSerializer(profile)
+    return Response(serializer.data)
+

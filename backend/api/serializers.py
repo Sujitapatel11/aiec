@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import Lead, Questionnaire, Country, Course
+from .models import (
+    Lead, Questionnaire, Country, Course,
+    StudentProfile, ProcessStep, Payment
+)
 
 
 class LeadSerializer(serializers.ModelSerializer):
@@ -104,5 +107,99 @@ class ProfileRecommendationSerializer(serializers.Serializer):
                 return round((value / 1000.0) * 100.0, 1)
             return 100.0
         return max(0.0, min(100.0, value))
+
+
+# ── Student Enrollment & Process Serializers ───────────────────────────────
+
+class PaymentSerializer(serializers.ModelSerializer):
+    recorded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = ['id', 'step', 'amount', 'payment_date', 'recorded_by', 'recorded_by_name', 'notes']
+        read_only_fields = ['payment_date', 'recorded_by']
+
+    def get_recorded_by_name(self, obj):
+        if obj.recorded_by:
+            return obj.recorded_by.get_full_name() or obj.recorded_by.username
+        return 'System'
+
+
+class ProcessStepSerializer(serializers.ModelSerializer):
+    payments = PaymentSerializer(many=True, read_only=True)
+    total_paid = serializers.SerializerMethodField()
+    balance_due = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProcessStep
+        fields = [
+            'id', 'student', 'step_name', 'status', 'estimated_cost',
+            'due_date', 'completed_at', 'notes', 'order',
+            'payments', 'total_paid', 'balance_due'
+        ]
+        read_only_fields = ['student']
+
+    def get_total_paid(self, obj):
+        return sum(p.amount for p in obj.payments.all())
+
+    def get_balance_due(self, obj):
+        return max(0.00, float(obj.estimated_cost) - float(self.get_total_paid(obj)))
+
+
+class StudentProfileSerializer(serializers.ModelSerializer):
+    process_steps = ProcessStepSerializer(many=True, read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    enrolled_by_name = serializers.SerializerMethodField()
+    total_estimated_cost = serializers.SerializerMethodField()
+    total_paid = serializers.SerializerMethodField()
+    pending_balance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentProfile
+        fields = [
+            'id', 'user', 'username', 'email', 'full_name', 'phone', 'destination_country',
+            'enrollment_date', 'enrolled_by', 'enrolled_by_name', 'notes',
+            'process_steps', 'total_estimated_cost', 'total_paid', 'pending_balance'
+        ]
+
+    def get_enrolled_by_name(self, obj):
+        if obj.enrolled_by:
+            return obj.enrolled_by.get_full_name() or obj.enrolled_by.username
+        return 'System'
+
+    def get_total_estimated_cost(self, obj):
+        return sum(step.estimated_cost for step in obj.process_steps.all())
+
+    def get_total_paid(self, obj):
+        total = 0
+        for step in obj.process_steps.all():
+            total += sum(p.amount for p in step.payments.all())
+        return total
+
+    def get_pending_balance(self, obj):
+        return max(0.00, float(self.get_total_estimated_cost(obj)) - float(self.get_total_paid(obj)))
+
+
+class StudentEnrollmentSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=200)
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    phone = serializers.CharField(max_length=30)
+    destination_country = serializers.CharField(max_length=100)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_username(self, value):
+        from django.contrib.auth.models import User
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists.")
+        return value
+
+    def validate_email(self, value):
+        from django.contrib.auth.models import User
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
 
 

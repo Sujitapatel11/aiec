@@ -26,3 +26,6 @@ frontend/.env
 .DS_Store
 Thumbs.db
 *.log
+scratch/
+mixkit_toronto.mp4
+

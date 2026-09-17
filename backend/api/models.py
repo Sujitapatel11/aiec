@@ -1,4 +1,15 @@
 from django.db import models
+from django.contrib.auth.models import User
+
+DEFAULT_CHECKLIST_TEMPLATE = [
+    {"step_name": "Document Collection", "order": 1},
+    {"step_name": "University Application", "order": 2},
+    {"step_name": "Offer Letter", "order": 3},
+    {"step_name": "Visa Application", "order": 4},
+    {"step_name": "Visa Interview", "order": 5},
+    {"step_name": "Visa Approval", "order": 6},
+    {"step_name": "Pre-departure", "order": 7},
+]
 
 
 class Lead(models.Model):
@@ -93,3 +104,61 @@ class Course(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.university}"
+
+
+# ── Student Enrollment & Process Tracking System ───────────────────────────
+
+class StudentProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
+    full_name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=30)
+    destination_country = models.CharField(max_length=100)
+    enrollment_date = models.DateField(auto_now_add=True)
+    enrolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='enrolled_students')
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Student: {self.full_name} ({self.destination_country})"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class ProcessStep(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='process_steps')
+    step_name = models.CharField(max_length=200)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    estimated_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    due_date = models.DateField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.student.full_name} - Step {self.order}: {self.step_name} [{self.status}]"
+
+    class Meta:
+        ordering = ['order', 'id']
+
+
+class Payment(models.Model):
+    step = models.ForeignKey(ProcessStep, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_date = models.DateField(auto_now_add=True)
+    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='recorded_payments')
+    notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Payment ${self.amount} for {self.step.step_name} on {self.payment_date}"
+
+    class Meta:
+        ordering = ['-payment_date', '-id']
+

@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -68,8 +68,52 @@ export default function Home() {
   const [contactSent, setContactSent] = useState(false);
   const [contactLoading, setContactLoading] = useState(false);
   const [activeCardId, setActiveCardId] = useState(null);
+  
+  // Hero Video Quality & Mobile Stability State
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isSlowConnection, setIsSlowConnection] = useState(false);
+  const videoRef = useRef(null);
+
   const wa = import.meta.env.VITE_WHATSAPP || '919802020575';
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // 1. Detect slow network connection (Network Information API)
+    if (typeof navigator !== 'undefined' && navigator.connection) {
+      const conn = navigator.connection;
+      if (conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g') {
+        setIsSlowConnection(true);
+        return;
+      }
+    }
+
+    // 2. Safety timeout fallback: if video hasn't loaded within 6 seconds, maintain static poster
+    const timer = setTimeout(() => {
+      if (videoRef.current && (videoRef.current.readyState < 2 || videoRef.current.paused)) {
+        console.log('Hero video load timed out (>6s) or slow network — maintaining poster fallback');
+      }
+    }, 6000);
+
+    // 3. Programmatic play attempt for mobile Safari / browser policies
+    if (videoRef.current) {
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          setIsVideoReady(true);
+        }).catch(err => {
+          console.warn('Hero video autoplay deferred by browser policy:', err);
+        });
+      }
+    }
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleVideoReady = () => {
+    if (!isSlowConnection) {
+      setIsVideoReady(true);
+    }
+  };
 
   const handleContact = async (e) => {
     e.preventDefault();
@@ -90,28 +134,40 @@ export default function Home() {
       {/* ══ 1. HERO SECTION (Full-Bleed Cinematic Background Video + Readability Overlay) ══ */}
       <section className="relative py-24 lg:py-32 overflow-hidden bg-navy-950 text-white border-b border-slate-200/20">
         
-        {/* ── Background Media Layer (Self-Hosted Video & Poster Fallback) ── */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          {/* Static Poster Image Fallback (Instant load on mobile & slow networks) */}
+        {/* ── Background Media Layer (Self-Hosted Dual Video & Poster Fallback) ── */}
+        <div className="absolute inset-0 z-0 overflow-hidden bg-navy-950">
+          {/* Static Poster Image (Shown instantly on load, slow networks, or initial buffer) */}
           <img
             src="/hero-poster.jpg"
             alt="Students Studying Abroad"
-            className="absolute inset-0 w-full h-full object-cover opacity-90 brightness-95 contrast-100"
-            loading="lazy"
+            className={`absolute inset-0 w-full h-full object-cover brightness-95 contrast-100 z-0 transition-opacity duration-700 ${
+              isVideoReady ? 'opacity-0 pointer-events-none' : 'opacity-90'
+            }`}
+            loading="eager"
           />
 
-          {/* Compressed Autoplay Video Background (Local self-hosted asset) */}
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            poster="/hero-poster.jpg"
-            className="absolute inset-0 w-full h-full object-cover z-0 opacity-90 brightness-95 contrast-100"
-          >
-            <source src="/hero-video.mp4" type="video/mp4" />
-          </video>
+          {/* Compressed Autoplay Video Background with Progressive Enhancement */}
+          {!isSlowConnection && (
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/hero-poster.jpg"
+              onCanPlay={handleVideoReady}
+              onCanPlayThrough={handleVideoReady}
+              onPlaying={handleVideoReady}
+              className={`absolute inset-0 w-full h-full object-cover z-0 brightness-95 contrast-100 transition-opacity duration-700 ${
+                isVideoReady ? 'opacity-90' : 'opacity-0'
+              }`}
+            >
+              <source src="/hero-video-mobile.mp4" type="video/mp4" media="(max-width: 767px)" />
+              <source src="/hero-video-desktop.mp4" type="video/mp4" media="(min-width: 768px)" />
+              <source src="/hero-video-desktop.mp4" type="video/mp4" />
+            </video>
+          )}
 
           {/* Mobile & Desktop Readability Gradient Overlays */}
           <div className="absolute inset-0 bg-gradient-to-b from-navy-950/80 via-navy-950/55 to-navy-950/30 lg:bg-gradient-to-r lg:from-navy-950/85 lg:via-navy-950/50 lg:to-transparent z-10 pointer-events-none" />
