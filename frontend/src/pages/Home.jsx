@@ -29,6 +29,7 @@ import { submitContact } from '../api';
 import CountryHoverCard from '../components/CountryHoverCard';
 import VisaGauge2D from '../components/VisaGauge2D';
 import { COUNTRY_VIDEOS } from '../data/countryVideos';
+import TESTIMONIALS_DATA from '../data/testimonials';
 
 // Static Icon Mappings for Clean Look
 const SERVICES = [
@@ -40,12 +41,6 @@ const SERVICES = [
   { icon: HomeIcon, title: 'Post-Arrival Support', desc: 'We stay with you after landing — helping with university enrollment, local setup, and settling in.' },
 ];
 
-const TESTIMONIALS = [
-  { name: 'Priya Sharma', dest: 'MS CS — University of Toronto, Canada', text: 'AIEC made my dream of studying in Canada a reality. The AI assessment was spot-on and the counselors guided me through every step.', avatar: 'PS', color: 'bg-navy-600' },
-  { name: 'Rahul Mehta', dest: 'MBA — Melbourne Business School, Australia', text: 'From shortlisting universities to visa approval, the team was incredibly supportive. Got a 40% scholarship too!', avatar: 'RM', color: 'bg-emerald-600' },
-  { name: 'Ananya Patel', dest: 'MSc Finance — University of Manchester, UK', text: 'The AI tool recommended Manchester before I even knew about it. Best decision of my life. Highly recommend AIEC!', avatar: 'AP', color: 'bg-crimson-600' },
-  { name: 'Karan Singh', dest: 'MEng — TU Munich, Germany', text: 'Free tuition in Germany seemed too good to be true. AIEC helped me navigate the entire process seamlessly.', avatar: 'KS', color: 'bg-amber-600' },
-];
 
 const STATS = [
   { value: '500+', label: 'Students Guided', icon: GraduationCap },
@@ -454,45 +449,105 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-14">
             <span className="text-xs font-bold uppercase tracking-widest text-navy-600 block mb-2 font-display">
-              Proven Results
+              Student Experiences
             </span>
             <h2 className="section-title">Why Students Trust AIEC</h2>
-            <p className="section-subtitle">Real feedback from Nepali students studying across the globe.</p>
+            <p className="section-subtitle">Real feedback from students studying across the globe.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {TESTIMONIALS.map((t, i) => (
+          {/* DO NOT add fabricated testimonial names/quotes here — placeholder only until real client data is provided */}
+          {TESTIMONIALS_DATA.isPlaceholder || !TESTIMONIALS_DATA.items || TESTIMONIALS_DATA.items.length === 0 ? (
+            <div className="max-w-3xl mx-auto">
               <motion.div
-                key={t.name}
-                className="bg-slate-50/80 rounded-2xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+                className="bg-slate-50/80 rounded-2xl p-8 sm:p-12 border border-slate-200/80 shadow-sm text-center relative overflow-hidden"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: i * 0.1 }}
+                transition={{ duration: 0.5 }}
               >
-                <div>
-                  <div className="flex gap-1 mb-4">
-                    {[...Array(5)].map((_, j) => (
-                      <Star key={j} className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    ))}
-                  </div>
-                  <p className="text-slate-700 leading-relaxed font-sans text-sm sm:text-base italic mb-6">
-                    "{t.text}"
-                  </p>
+                {/* Subtle Accent Background Glow */}
+                <div className="absolute -top-24 -right-24 w-48 h-48 bg-navy-600/5 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-crimson-600/5 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="w-14 h-14 bg-navy-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-navy-600 border border-navy-100 shadow-2xs">
+                  <MessageSquare className="w-7 h-7" />
                 </div>
 
-                <div className="flex items-center gap-3 pt-2 border-t border-slate-200/60">
-                  <div className={`w-10 h-10 ${t.color} rounded-full flex items-center justify-center text-white font-display font-bold text-sm`}>
-                    {t.avatar}
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-navy-100/70 text-navy-700 text-xs font-semibold uppercase tracking-wider mb-4">
+                  <ShieldCheck className="w-3.5 h-3.5 text-navy-600" />
+                  <span>Honest & Verified Guidance</span>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl font-bold font-display text-slate-900 mb-3">
+                  {TESTIMONIALS_DATA.placeholderTitle || "Verified Student Reviews Coming Soon"}
+                </h3>
+
+                <p className="text-slate-600 text-sm sm:text-base font-sans max-w-xl mx-auto leading-relaxed mb-8">
+                  {TESTIMONIALS_DATA.placeholderSubtitle || "We are currently updating this section with verified student experiences, university acceptances, and placement feedback."}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-slate-200/70 max-w-2xl mx-auto">
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/60 shadow-2xs text-left">
+                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs sm:text-sm font-display mb-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>100% Authentic</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-sans">No fake or fabricated student reviews.</p>
                   </div>
-                  <div>
-                    <p className="font-display font-bold text-slate-900 text-sm">{t.name}</p>
-                    <p className="text-xs font-medium text-navy-600 font-sans">{t.dest}</p>
+
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/60 shadow-2xs text-left">
+                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs sm:text-sm font-display mb-1">
+                      <ShieldCheck className="w-4 h-4 text-navy-600 shrink-0" />
+                      <span>Verified Placements</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-sans font-medium">Reviews collected from verified enrollments.</p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/60 shadow-2xs text-left">
+                    <div className="flex items-center gap-2 text-slate-900 font-semibold text-xs sm:text-sm font-display mb-1">
+                      <Award className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Transparent Quality</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-sans font-medium">Real university admission outcomes.</p>
                   </div>
                 </div>
               </motion.div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {TESTIMONIALS_DATA.items.map((t, i) => (
+                <motion.div
+                  key={t.name || i}
+                  className="bg-slate-50/80 rounded-2xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: i * 0.1 }}
+                >
+                  <div>
+                    <div className="flex gap-1 mb-4">
+                      {[...Array(t.rating || 5)].map((_, j) => (
+                        <Star key={j} className="w-4 h-4 text-amber-400 fill-amber-400" />
+                      ))}
+                    </div>
+                    <p className="text-slate-700 leading-relaxed font-sans text-sm sm:text-base italic mb-6">
+                      "{t.text}"
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 border-t border-slate-200/60">
+                    <div className={`w-10 h-10 ${t.color || 'bg-navy-600'} rounded-full flex items-center justify-center text-white font-display font-bold text-sm`}>
+                      {t.avatar || t.name?.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-display font-bold text-slate-900 text-sm">{t.name}</p>
+                      <p className="text-xs font-medium text-navy-600 font-sans">{t.dest}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

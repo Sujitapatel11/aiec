@@ -5,8 +5,8 @@
  */
 export const TESTIMONIALS_DATA = {
   isPlaceholder: true,
-  placeholderTitle: "Student Success Stories Coming Soon",
-  placeholderSubtitle: "We are updating this section with verified student experiences and placement feedback.",
+  placeholderTitle: "Verified Student Reviews Coming Soon",
+  placeholderSubtitle: "We are currently updating this section with verified student experiences, university acceptances, and placement feedback.",
   items: []
 };
 
