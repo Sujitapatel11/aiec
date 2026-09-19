@@ -18,6 +18,7 @@ urlpatterns = [
     path('auth/logout/', views.admin_logout),
     path('auth/users/', views.manage_users),
     path('auth/users/<int:user_id>/', views.manage_user_detail),
+    path('staff/create/', views.create_staff),
     path('chat/', views.chat_counsellor),
     # Student Enrollment & Process Tracking
     path('students/enroll/', views.enroll_student),

@@ -26,6 +26,23 @@ from .notify import send_lead_notification
 from .whatsapp_service import send_step_completion_whatsapp
 from django.contrib.auth.models import User, Group
 import threading
+import re
+
+WEAK_PASSWORDS_BLACKLIST = {
+    '1234', '12345', '123456', '12345678', '123456789', 'password', 'password123',
+    'admin123', 'qwerty123', 'letmein123', 'welcome123', 'staff123', 'admin'
+}
+
+def validate_password_strength(password):
+    """Validates server-side password strength rules for staff account creation."""
+    if not password or len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if password.lower() in WEAK_PASSWORDS_BLACKLIST:
+        return "Password is too weak or common. Please choose a stronger password."
+    if not (re.search(r'[A-Za-z]', password) and re.search(r'\d', password)):
+        return "Password must contain a mix of both letters and numbers."
+    return None
+
 
 
 # ── Admin-only viewsets ────────────────────────────────────────────────────
@@ -322,8 +339,10 @@ def manage_users(request):
         return Response({'error': 'Username and password are required.'}, status=400)
     if User.objects.filter(username=username).exists():
         return Response({'error': 'Username already exists.'}, status=400)
-    if len(password) < 6:
-        return Response({'error': 'Password must be at least 6 characters.'}, status=400)
+    
+    pwd_error = validate_password_strength(password)
+    if pwd_error:
+        return Response({'error': pwd_error}, status=400)
 
     user = User.objects.create_user(
         username=username, password=password,
@@ -339,6 +358,65 @@ def manage_users(request):
         'role': role, 'is_active': True,
         'message': f'Staff member "{username}" created successfully.'
     }, status=201)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_staff(request):
+    """Create a new staff member account. Admin-only (is_superuser check)."""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Admin access required. Staff members cannot create staff accounts.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    full_name = request.data.get('full_name') or request.data.get('name', '')
+    full_name = str(full_name).strip()
+    username = request.data.get('username', '').strip()
+    email = request.data.get('email', '').strip()
+    phone = request.data.get('phone', '').strip()
+    password = request.data.get('password', '').strip()
+
+    if not full_name or not username or not password:
+        return Response({'error': 'Full name, username, and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pwd_error = validate_password_strength(password)
+    if pwd_error:
+        return Response({'error': pwd_error}, status=status.HTTP_400_BAD_REQUEST)
+
+    name_parts = full_name.split(maxsplit=1)
+    first_name = name_parts[0] if name_parts else ''
+    last_name = name_parts[1] if len(name_parts) > 1 else ''
+
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+        is_staff=True,
+        is_superuser=False,
+        is_active=True
+    )
+
+    staff_group, _ = Group.objects.get_or_create(name='Staff')
+    user.groups.add(staff_group)
+
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'name': user.get_full_name() or user.username,
+        'full_name': user.get_full_name() or user.username,
+        'email': user.email,
+        'phone': phone,
+        'role': 'staff',
+        'is_active': True,
+        'message': f'Staff member "{username}" created successfully.'
+    }, status=status.HTTP_201_CREATED)
+
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])

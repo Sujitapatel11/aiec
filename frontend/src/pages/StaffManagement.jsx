@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUsers, createUser, updateUser, deleteUser } from '../api'
+import { getUsers, createStaff, updateUser, deleteUser } from '../api'
 
 const ROLE_COLORS = {
   admin: 'bg-purple-100 text-purple-700',
@@ -88,19 +88,22 @@ export default function StaffManagement() {
               <p className="text-xs text-gray-400">Create, manage and deactivate staff accounts</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
-          >
-            + Add Staff
-          </button>
+          {isAdmin && (
+            <button
+              id="create-staff-btn"
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
+            >
+              + Add Staff
+            </button>
+          )}
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         {/* Alerts */}
-        {error   && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">⚠️ {error}</div>}
-        {success && <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">✅ {success}</div>}
+        {error   && <div id="alert-error-banner" className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">⚠️ {error}</div>}
+        {success && <div id="alert-success-banner" className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">✅ {success}</div>}
 
         {/* Info box */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4 mb-6 text-sm text-blue-800">
@@ -182,10 +185,10 @@ export default function StaffManagement() {
       </div>
 
       {/* Create modal */}
-      {showCreate && (
+      {showCreate && isAdmin && (
         <CreateUserModal
           onClose={() => setShowCreate(false)}
-          onCreated={(u) => { setUsers(prev => [u, ...prev]); setShowCreate(false); notify(`"${u.username}" created successfully.`) }}
+          onCreated={(u) => { setUsers(prev => [u, ...prev]); setShowCreate(false); notify(`Staff account "${u.username}" created successfully.`) }}
           onError={(msg) => notify(msg, true)}
         />
       )}
@@ -203,51 +206,209 @@ export default function StaffManagement() {
   )
 }
 
-/* ── Create User Modal ─────────────────────────────────────────────── */
+/* ── Create Staff Modal ─────────────────────────────────────────────── */
 function CreateUserModal({ onClose, onCreated, onError }) {
-  const [form, setForm] = useState({ username: '', password: '', first_name: '', last_name: '', email: '', role: 'staff' })
+  const [form, setForm] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    phone: '',
+    password: ''
+  })
+  const [modalError, setModalError] = useState('')
   const [loading, setLoading] = useState(false)
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }))
+    if (modalError) setModalError('')
+  }
+
+  // Password Strength Evaluation
+  const pwd = form.password
+  const hasMinLength = pwd.length >= 8
+  const hasLetter = /[A-Za-z]/.test(pwd)
+  const hasNumber = /[0-9]/.test(pwd)
+  const isBlacklisted = ['1234', '12345', '123456', '12345678', '123456789', 'password', 'password123', 'admin123', 'qwerty123'].includes(pwd.toLowerCase())
+
+  let strengthLabel = 'Weak'
+  let strengthColor = 'bg-red-500'
+  let strengthText = 'text-red-600'
+  let strengthPercent = '33%'
+
+  if (hasMinLength && hasLetter && hasNumber && !isBlacklisted) {
+    strengthLabel = 'Strong'
+    strengthColor = 'bg-green-500'
+    strengthText = 'text-green-600'
+    strengthPercent = '100%'
+  } else if ((hasMinLength && (hasLetter || hasNumber)) || pwd.length >= 6) {
+    strengthLabel = 'Medium'
+    strengthColor = 'bg-amber-500'
+    strengthText = 'text-amber-600'
+    strengthPercent = '66%'
+  }
+
+  const isPasswordValid = hasMinLength && hasLetter && hasNumber && !isBlacklisted
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (!form.full_name.trim() || !form.username.trim() || !form.password) {
+      setModalError('Please fill in all required fields.')
+      return
+    }
+
+    if (!isPasswordValid) {
+      setModalError('Password must be at least 8 characters long and contain both letters and numbers.')
+      return
+    }
+
     setLoading(true)
+    setModalError('')
+
     try {
-      const res = await createUser(form)
-      onCreated({ id: res.data.id, username: res.data.username, name: res.data.name, role: res.data.role, is_active: true, email: form.email, date_joined: 'Today' })
-    } catch (err) { onError(err.response?.data?.error || 'Failed to create user.') }
-    finally { setLoading(false) }
+      const res = await createStaff({
+        full_name: form.full_name,
+        username: form.username,
+        email: form.email,
+        phone: form.phone,
+        password: form.password
+      })
+
+      onCreated({
+        id: res.data.id,
+        username: res.data.username,
+        name: res.data.name || res.data.full_name || form.full_name,
+        email: res.data.email || form.email,
+        role: 'staff',
+        is_active: true,
+        date_joined: 'Today'
+      })
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Failed to create staff account.'
+      setModalError(errorMsg)
+      onError(errorMsg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Modal title="Add New Staff Member" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <input className="input-field text-sm" placeholder="First Name" value={form.first_name} onChange={e => set('first_name', e.target.value)} />
-          <input className="input-field text-sm" placeholder="Last Name" value={form.last_name} onChange={e => set('last_name', e.target.value)} />
-        </div>
-        <input className="input-field text-sm" placeholder="Username *" value={form.username} onChange={e => set('username', e.target.value)} required />
-        <input className="input-field text-sm" type="email" placeholder="Email" value={form.email} onChange={e => set('email', e.target.value)} />
-        <input className="input-field text-sm" type="password" placeholder="Password * (min 6 chars)" value={form.password} onChange={e => set('password', e.target.value)} required />
-        <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase mb-1.5 block">Role</label>
-          <div className="flex gap-3">
-            {['staff', 'admin'].map(r => (
-              <label key={r} className={`flex-1 flex items-center gap-2 border-2 rounded-xl px-4 py-2.5 cursor-pointer transition-all ${form.role === r ? 'border-primary-500 bg-primary-50' : 'border-gray-200'}`}>
-                <input type="radio" name="role" value={r} checked={form.role === r} onChange={() => set('role', r)} className="accent-primary-600" />
-                <span className="text-sm font-medium capitalize">{r === 'admin' ? '👑 Admin' : '👤 Staff'}</span>
-              </label>
-            ))}
+        {modalError && (
+          <div id="modal-error-banner" className="bg-red-50 border border-red-200 text-red-700 text-xs px-3.5 py-2.5 rounded-xl flex items-start gap-2">
+            <span>⚠️</span>
+            <span>{modalError}</span>
           </div>
-          <p className="text-xs text-gray-400 mt-1.5">{form.role === 'admin' ? 'Full access including staff management' : 'Can view and update leads only'}</p>
+        )}
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 mb-1 block">Full Name *</label>
+          <input
+            id="staff-full-name-input"
+            className="input-field text-sm"
+            placeholder="e.g. Sarah Jenkins"
+            value={form.full_name}
+            onChange={e => set('full_name', e.target.value)}
+            required
+          />
         </div>
-        <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 mt-2">
-          {loading ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Creating...</> : 'Create Staff Member'}
-        </button>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Username *</label>
+            <input
+              id="staff-username-input"
+              className="input-field text-sm"
+              placeholder="e.g. sjenkins"
+              value={form.username}
+              onChange={e => set('username', e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone (Optional)</label>
+            <input
+              id="staff-phone-input"
+              className="input-field text-sm"
+              placeholder="+1 555-0199"
+              value={form.phone}
+              onChange={e => set('phone', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 mb-1 block">Email (Optional)</label>
+          <input
+            id="staff-email-input"
+            className="input-field text-sm"
+            type="email"
+            placeholder="sarah@example.com"
+            value={form.email}
+            onChange={e => set('email', e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-600 mb-1 block">Password *</label>
+          <input
+            id="staff-password-input"
+            className="input-field text-sm"
+            type="password"
+            placeholder="Set staff password (min 8 chars)"
+            value={form.password}
+            onChange={e => set('password', e.target.value)}
+            required
+          />
+
+          {/* Password Strength Indicator */}
+          {form.password.length > 0 && (
+            <div className="mt-2 space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500 font-medium">Strength:</span>
+                <span className={`font-bold ${strengthText}`}>{strengthLabel}</span>
+              </div>
+              <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${strengthColor}`}
+                  style={{ width: strengthPercent }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-[11px] pt-1">
+                <span className={`flex items-center gap-1 ${hasMinLength ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                  {hasMinLength ? '✓' : '○'} 8+ characters
+                </span>
+                <span className={`flex items-center gap-1 ${hasLetter && hasNumber ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                  {hasLetter && hasNumber ? '✓' : '○'} Letters & numbers
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-2">
+          <button
+            id="submit-create-staff-btn"
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Creating Account...
+              </>
+            ) : (
+              'Create Staff Account'
+            )}
+          </button>
+        </div>
       </form>
     </Modal>
   )
 }
+
 
 /* ── Edit User Modal ───────────────────────────────────────────────── */
 function EditUserModal({ user, onClose, onUpdated, onError }) {
