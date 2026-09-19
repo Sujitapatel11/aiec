@@ -28,5 +28,10 @@ urlpatterns = [
     path('steps/<int:step_id>/', views.manage_process_step_detail),
     path('steps/<int:step_id>/payments/', views.add_step_payment),
     path('student-portal/my-profile/', views.student_portal_me),
+    # Video Testimonials API
+    path('testimonials/video/public/', views.public_video_testimonials),
+    path('testimonials/video/', views.manage_video_testimonials),
+    path('testimonials/video/upload/', views.upload_video_testimonial),
+    path('testimonials/video/<int:pk>/', views.manage_video_testimonial_detail),
 ]
 

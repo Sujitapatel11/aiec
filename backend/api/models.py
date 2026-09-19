@@ -162,3 +162,21 @@ class Payment(models.Model):
     class Meta:
         ordering = ['-payment_date', '-id']
 
+
+class VideoTestimonial(models.Model):
+    student_name = models.CharField(max_length=200, blank=True, default='')
+    video_url = models.URLField(max_length=500)
+    thumbnail_url = models.URLField(max_length=500, blank=True, default='')
+    public_id = models.CharField(max_length=200, blank=True, default='')
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='video_testimonials')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    is_published = models.BooleanField(default=True)
+    display_order = models.IntegerField(default=0)
+
+    def __str__(self):
+        name = self.student_name if self.student_name else "Anonymous Student"
+        return f"Video Testimonial: {name} [{'Published' if self.is_published else 'Draft'}]"
+
+    class Meta:
+        ordering = ['display_order', '-uploaded_at', '-id']
+

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   getLeads, getDashboardStats, updateLead, adminLogout,
   getStudents, getStudentDetail, enrollStudent, deleteStudent,
-  addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment
+  addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment,
+  getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial
 } from '../api'
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -252,11 +253,102 @@ export default function Dashboard() {
     }
   }, [])
 
+  // Video Testimonials tab state
+  const [videoTestimonials, setVideoTestimonials]   = useState([])
+  const [videoLoading, setVideoLoading]             = useState(false)
+  const [uploadingVideo, setUploadingVideo]         = useState(false)
+  const [videoFile, setVideoFile]                   = useState(null)
+  const [studentNameInput, setStudentNameInput]     = useState('')
+  const [videoUploadError, setVideoUploadError]     = useState('')
+
+  const fetchVideoTestimonials = useCallback(async () => {
+    setVideoLoading(true)
+    try {
+      const res = await getVideoTestimonials()
+      setVideoTestimonials(res.data)
+    } catch {
+      // video fetch fallback
+    } finally {
+      setVideoLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchStats()
     fetchLeads()
     fetchStudents()
-  }, [fetchStats, fetchLeads, fetchStudents])
+    fetchVideoTestimonials()
+  }, [fetchStats, fetchLeads, fetchStudents, fetchVideoTestimonials])
+
+  const handleVideoUpload = async (e) => {
+    e.preventDefault()
+    setVideoUploadError('')
+
+    if (!videoFile) {
+      setVideoUploadError('Please select a video file.')
+      return
+    }
+
+    // Client-side format check
+    const ext = videoFile.name.substring(videoFile.name.lastIndexOf('.')).toLowerCase()
+    const allowed = ['.mp4', '.mov', '.webm', '.avi', '.mkv']
+    if (!allowed.includes(ext)) {
+      setVideoUploadError(`Invalid file format (${ext}). Supported: MP4, MOV, WEBM, AVI, MKV.`)
+      return
+    }
+
+    // Client-side size check (100MB)
+    if (videoFile.size > 100 * 1024 * 1024) {
+      setVideoUploadError(`File size exceeds 100MB limit (${(videoFile.size / (1024*1024)).toFixed(1)}MB). Please choose a smaller video.`)
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', videoFile)
+    if (studentNameInput.trim()) {
+      formData.append('student_name', studentNameInput.trim())
+    }
+
+    setUploadingVideo(true)
+    try {
+      await uploadVideoTestimonial(formData)
+      setVideoFile(null)
+      setStudentNameInput('')
+      const fileInput = document.getElementById('video-file-input')
+      if (fileInput) fileInput.value = ''
+      setActionNotice('Video testimonial uploaded successfully to Cloudinary!')
+      setTimeout(() => setActionNotice(''), 4000)
+      fetchVideoTestimonials()
+    } catch (err) {
+      setVideoUploadError(err.response?.data?.error || 'Failed to upload video testimonial.')
+    } finally {
+      setUploadingVideo(false)
+    }
+  }
+
+  const handleTogglePublishVideo = async (video) => {
+    try {
+      await updateVideoTestimonial(video.id, { is_published: !video.is_published })
+      fetchVideoTestimonials()
+      setActionNotice(`Video status set to ${!video.is_published ? 'Published' : 'Draft'}.`)
+      setTimeout(() => setActionNotice(''), 3000)
+    } catch {
+      alert('Failed to update video testimonial status.')
+    }
+  }
+
+  const handleDeleteVideo = async (videoId) => {
+    if (!isAdmin) return
+    if (!window.confirm('Are you sure you want to delete this video testimonial? This will remove the Cloudinary file and record permanently.')) return
+    try {
+      await deleteVideoTestimonial(videoId)
+      fetchVideoTestimonials()
+      setActionNotice('Video testimonial deleted permanently.')
+      setTimeout(() => setActionNotice(''), 3000)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete video testimonial.')
+    }
+  }
 
   const handleStatusChange = async (leadId, newStatus) => {
     try {
@@ -477,6 +569,16 @@ export default function Dashboard() {
               <span>🎓 Enrolled Students</span>
               <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold">{students.length}</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('videos')}
+              className={`pb-3 px-2 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+                activeTab === 'videos' ? 'border-slate-900 text-slate-900' : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <span>🎥 Video Testimonials</span>
+              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full font-bold">{videoTestimonials.length}</span>
+            </button>
           </div>
 
           {activeTab === 'students' && (
@@ -671,6 +773,163 @@ export default function Dashboard() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── TAB 3: VIDEO TESTIMONIALS ───────────────────────────── */}
+        {activeTab === 'videos' && (
+          <div className="space-y-8">
+            {/* Upload Box */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+              <div className="mb-4">
+                <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
+                  <span>🎥 Upload New Video Testimonial</span>
+                  <span className="text-[11px] bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full">Cloudinary Permanent Storage</span>
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Upload short student video testimonials (MP4, MOV, WEBM — Max 100MB). Accessible to Admin & Staff.
+                </p>
+              </div>
+
+              {videoUploadError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl mb-4 flex items-start justify-between">
+                  <div>
+                    <span className="font-bold block">Upload Notice / Error:</span>
+                    <span>{videoUploadError}</span>
+                  </div>
+                  <button onClick={() => setVideoUploadError('')} className="font-bold text-red-800 ml-2">✕</button>
+                </div>
+              )}
+
+              <form onSubmit={handleVideoUpload} className="grid sm:grid-cols-12 gap-4 items-end">
+                <div className="sm:col-span-5">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Select Video File *</label>
+                  <input
+                    id="video-file-input"
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-matroska"
+                    required
+                    onChange={e => setVideoFile(e.target.files?.[0] || null)}
+                    className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white hover:file:bg-slate-800 cursor-pointer"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Accepted: .mp4, .mov, .webm, .mkv (Max 100MB)</p>
+                </div>
+
+                <div className="sm:col-span-5">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Student Name (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aarav Sharma, Canada Student"
+                    value={studentNameInput}
+                    onChange={e => setStudentNameInput(e.target.value)}
+                    className="input-field text-xs py-2 px-3"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Leave blank for anonymous client choice</p>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={uploadingVideo}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                  >
+                    {uploadingVideo ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>☁️ Upload Video</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Video Testimonials List / Grid */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6 pb-3 border-b border-gray-100">
+                <div>
+                  <h3 className="font-bold text-gray-900">Uploaded Video Testimonials</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{videoTestimonials.length} total videos · Admin (Delete) & Staff (Upload/Toggle)</p>
+                </div>
+              </div>
+
+              {videoLoading ? (
+                <div className="flex justify-center py-16">
+                  <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : videoTestimonials.length === 0 ? (
+                <div className="text-center py-16 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                  <p className="text-3xl mb-2">🎥</p>
+                  <p className="font-bold text-slate-800 text-sm">No video testimonials uploaded yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Use the upload form above to add your first student video testimonial.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {videoTestimonials.map((v) => (
+                    <div key={v.id} className="bg-slate-50/80 border border-slate-200/80 rounded-2xl overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow">
+                      <div>
+                        {/* Video Thumbnail / Player */}
+                        <div className="relative aspect-video bg-black flex items-center justify-center group overflow-hidden">
+                          <video
+                            src={v.video_url}
+                            poster={v.thumbnail_url}
+                            controls
+                            className="w-full h-full object-cover"
+                            preload="none"
+                          />
+                          <div className="absolute top-2 right-2 z-10">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                              v.is_published ? 'bg-emerald-500 text-white shadow-sm' : 'bg-amber-400 text-slate-900 shadow-sm'
+                            }`}>
+                              {v.is_published ? 'Live / Published' : 'Draft / Hidden'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Meta */}
+                        <div className="p-4 space-y-2">
+                          <h4 className="font-bold text-slate-900 text-sm">
+                            {v.student_name || 'Anonymous Student'}
+                          </h4>
+                          <div className="flex items-center justify-between text-[11px] text-gray-400">
+                            <span>Uploaded by: <strong className="text-gray-600">{v.uploaded_by_name}</strong></span>
+                            <span>{new Date(v.uploaded_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Actions */}
+                      <div className="p-3 bg-white border-t border-slate-200/60 flex items-center justify-between gap-2">
+                        {/* Toggle Publish (Admin + Staff) */}
+                        <button
+                          onClick={() => handleTogglePublishVideo(v)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
+                            v.is_published
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                          }`}
+                        >
+                          {v.is_published ? '👁️ Set Draft' : '🚀 Publish Live'}
+                        </button>
+
+                        {/* Delete Button (ADMIN ONLY) */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteVideo(v.id)}
+                            className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-3 py-1.5 rounded-xl border border-red-200 transition-all"
+                            title="Delete permanently from Cloudinary & DB (Admin Only)"
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

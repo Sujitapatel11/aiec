@@ -237,7 +237,7 @@ BEHAVIOUR:
 
 const INITIAL_MESSAGE = {
   role: 'assistant',
-  content: "Hi! I'm Grok AI, your personal study abroad counsellor at GlobalApply AI (powered by xAI Grok) 🚀\n\nI have real data on 20+ countries — tuition, visa success rates, PR pathways, scholarships, and top universities. Ask me anything!\n\nTo get started: What's your highest qualification? (e.g. 12th grade, Bachelor's, Master's)",
+  content: "Hi! I'm Aria, your personal study abroad counsellor at AIEC 🎓\n\nI have real data on 20+ countries — tuition, visa success rates, PR pathways, scholarships, and top universities. Ask me anything!\n\nTo get started: What's your highest qualification? (e.g. 12th grade, Bachelor's, Master's)",
 }
 
 
@@ -458,7 +458,9 @@ export default function ChatBot() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           ) : (
-            <span className="text-sm font-extrabold tracking-wider">GROK</span>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
           )}
         </button>
       </div>
@@ -469,13 +471,13 @@ export default function ChatBot() {
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-white flex items-center justify-center flex-shrink-0 p-1">
-              <img src={logo} alt="Grok AI" className="w-full h-full object-contain" />
+              <img src={logo} alt="AIEC Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <p className="text-white font-bold text-sm">Grok AI — Counsellor</p>
+              <p className="text-white font-bold text-sm">AIEC Counsellor</p>
               <p className="text-blue-200 text-xs flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block" />
-                Online · Powered by xAI Grok ⚡
+                Online · Senior Educational Advisor
               </p>
             </div>
 

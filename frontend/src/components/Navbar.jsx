@@ -13,12 +13,45 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [visible, setVisible] = useState(true);
   const { pathname } = useLocation();
   const isHome = pathname === '/';
 
+  const lastScrollY = React.useRef(0);
+  const ticking = React.useRef(false);
+
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
+    const updateScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      setScrolled(currentScrollY > 20);
+
+      // At top of page (or near top <= 10px), always show navbar
+      if (currentScrollY <= 10) {
+        setVisible(true);
+      } else {
+        // Scroll DOWN -> hide navbar
+        if (currentScrollY > lastScrollY.current + 3) {
+          setVisible(false);
+        }
+        // Scroll UP -> show navbar
+        else if (currentScrollY < lastScrollY.current - 3) {
+          setVisible(true);
+        }
+      }
+
+      lastScrollY.current = currentScrollY;
+      ticking.current = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking.current) {
+        window.requestAnimationFrame(updateScroll);
+        ticking.current = true;
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
@@ -30,8 +63,10 @@ export default function Navbar() {
     }
   };
 
+  const isNavVisible = visible || open;
+
   return (
-    <nav className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-md shadow-slate-200/50 border-b border-slate-200/80' : 'bg-white/80 backdrop-blur-sm border-b border-slate-100'}`}>
+    <nav className={`sticky top-0 z-50 transition-all duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'} ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-md shadow-slate-200/50 border-b border-slate-200/80' : 'bg-white/80 backdrop-blur-sm border-b border-slate-100'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
 

@@ -403,6 +403,76 @@ INTEREST_KEYWORDS = {
 }
 
 
+# ── Country Checklist Templates (Country-specific & Fallback) ─────────────
+
+DEFAULT_CHECKLIST = [
+    {"order": 1, "step_name": "Document Collection & Verification", "description": "Gather academic transcripts, passport copies, letters of recommendation, and statement of purpose.", "estimated_cost_usd": 0},
+    {"order": 2, "step_name": "University Application Submission", "description": "Submit applications to chosen university programs and pay application portal fees.", "estimated_cost_usd": 100},
+    {"order": 3, "step_name": "Offer Letter & Acceptance", "description": "Receive conditional/unconditional offer letters, accept offer, and pay initial tuition deposit.", "estimated_cost_usd": 0},
+    {"order": 4, "step_name": "Visa Application & Embassy Fee", "description": "Fill official student visa forms, upload financial documentation, and pay embassy processing fees.", "estimated_cost_usd": 200},
+    {"order": 5, "step_name": "Biometrics & Visa Interview", "description": "Schedule and attend VFS/embassy biometrics appointment and mock visa interview.", "estimated_cost_usd": 50},
+    {"order": 6, "step_name": "Visa Approval & Passport Stamping", "description": "Receive student visa decision and collect stamped passport from embassy or consulate.", "estimated_cost_usd": 0},
+    {"order": 7, "step_name": "Pre-departure & Flight Booking", "description": "Arrange student accommodation, international health insurance, flight tickets, and SIM card.", "estimated_cost_usd": 600},
+]
+
+COUNTRY_CHECKLIST_TEMPLATES = {
+    "Germany": [
+        {"order": 1, "step_name": "Document Collection & Translation", "description": "Gather notarized academic transcripts, German/English translations, SOP, and CV.", "estimated_cost_usd": 50},
+        {"order": 2, "step_name": "APS Verification Certificate", "description": "Mandatory academic evaluation by the German Embassy Academic Evaluation Center (APS).", "estimated_cost_usd": 200},
+        {"order": 3, "step_name": "University Application via Uni-Assist", "description": "Apply to public universities through Uni-Assist or direct university portals.", "estimated_cost_usd": 100},
+        {"order": 4, "step_name": "Blocked Account Setup (Fintiba/Expatrio)", "description": "Open a German Blocked Bank Account and deposit living expenses (€11,208/yr required).", "estimated_cost_usd": 150},
+        {"order": 5, "step_name": "German Student Visa Application", "description": "Book VFS/German Embassy visa appointment, submit Blocked Account proof & health insurance.", "estimated_cost_usd": 85},
+        {"order": 6, "step_name": "Biometrics & Visa Approval", "description": "Attend embassy biometric verification and receive D-Type National Student Visa.", "estimated_cost_usd": 0},
+        {"order": 7, "step_name": "Pre-departure & Flight Booking", "description": "Book flights to Germany, reserve student dormitory/WG accommodation, and secure travel insurance.", "estimated_cost_usd": 600},
+    ],
+    "Canada": [
+        {"order": 1, "step_name": "Document Collection & WES Evaluation", "description": "Prepare transcripts, SOP, reference letters, and optional WES credential evaluation.", "estimated_cost_usd": 220},
+        {"order": 2, "step_name": "IELTS / English Score Submission", "description": "Achieve minimum 6.0 overall for SDS stream and submit official test results.", "estimated_cost_usd": 250},
+        {"order": 3, "step_name": "DLI College / University Application", "description": "Apply to Designated Learning Institutions (DLIs) offering Post-Graduation Work Permits (PGWP).", "estimated_cost_usd": 120},
+        {"order": 4, "step_name": "Offer Letter & First Year Tuition Payment", "description": "Receive Letter of Acceptance (LOA) and pay 1st year tuition deposit to institution.", "estimated_cost_usd": 5000},
+        {"order": 5, "step_name": "GIC Account Deposit & PAL Certificate", "description": "Open Scotiabank/CIBC GIC account ($20,635 CAD) and obtain Provincial Attestation Letter (PAL).", "estimated_cost_usd": 200},
+        {"order": 6, "step_name": "Canada Study Permit & Biometrics", "description": "Submit online Study Permit application via IRCC, complete biometrics at VFS Canada.", "estimated_cost_usd": 185},
+        {"order": 7, "step_name": "Medical Exam & Pre-departure", "description": "Complete panel physician medical checkup, book flight tickets, and arrange student housing.", "estimated_cost_usd": 700},
+    ],
+    "Australia": [
+        {"order": 1, "step_name": "Academic & Financial Verification", "description": "Gather academic marksheets, bank balance statements, and Genuine Student (GS) statement.", "estimated_cost_usd": 0},
+        {"order": 2, "step_name": "University Application & Offer Letter", "description": "Apply to CRICOS-registered Australian universities and receive Offer Letter.", "estimated_cost_usd": 100},
+        {"order": 3, "step_name": "OSHC Health Cover & CoE Issuance", "description": "Purchase Overseas Student Health Cover (OSHC) and obtain Confirmation of Enrolment (CoE).", "estimated_cost_usd": 600},
+        {"order": 4, "step_name": "Subclass 500 Student Visa Application", "description": "Lodge online visa application via ImmiAccount with CoE and GS evidence.", "estimated_cost_usd": 470},
+        {"order": 5, "step_name": "Biometrics & Medical Examination", "description": "Complete Bupa medical checkup and biometrics collection at VFS Australia.", "estimated_cost_usd": 120},
+        {"order": 6, "step_name": "Visa Grant & Pre-departure Briefing", "description": "Receive Subclass 500 visa grant notification and attend pre-departure briefing.", "estimated_cost_usd": 0},
+        {"order": 7, "step_name": "Flight Booking & Airport Pickup", "description": "Book flights to Australia, arrange temporary homestay/student housing and bank account.", "estimated_cost_usd": 800},
+    ],
+    "United Kingdom": [
+        {"order": 1, "step_name": "Document Gathering & SOP Preparation", "description": "Prepare transcripts, degree certificate, SOP, and academic references.", "estimated_cost_usd": 0},
+        {"order": 2, "step_name": "UCAS / Direct University Application", "description": "Submit application to UK universities and receive conditional/unconditional offer.", "estimated_cost_usd": 50},
+        {"order": 3, "step_name": "CAS (Confirmation of Acceptance) Request", "description": "Pay tuition deposit and submit financial proof to university to receive CAS statement.", "estimated_cost_usd": 0},
+        {"order": 4, "step_name": "NHS Immigration Health Surcharge (IHS)", "description": "Pay mandatory NHS surcharge (£776/year) for UK healthcare access.", "estimated_cost_usd": 1000},
+        {"order": 5, "step_name": "UK Student Visa Online Application", "description": "Apply online for UK Student Visa (formerly Tier 4) using CAS number.", "estimated_cost_usd": 630},
+        {"order": 6, "step_name": "VFS Biometrics & TB Test", "description": "Undergo Tuberculosis (TB) screening at approved clinic and give biometrics at VFS UK.", "estimated_cost_usd": 100},
+        {"order": 7, "step_name": "Visa Approval & Travel Arrangement", "description": "Collect passport with 90-day entry vignette, book flight, and reserve UK accommodation.", "estimated_cost_usd": 650},
+    ],
+    "USA": [
+        {"order": 1, "step_name": "Transcript & Credential Evaluation", "description": "Gather transcripts, SOP, recommendation letters, and optional GRE/GMAT scores.", "estimated_cost_usd": 180},
+        {"order": 2, "step_name": "University Application & I-20 Request", "description": "Apply to accredited US universities, accept admission offer, and request Form I-20.", "estimated_cost_usd": 100},
+        {"order": 3, "step_name": "SEVIS I-901 Fee Payment", "description": "Pay mandatory $350 SEVIS fee online prior to visa interview.", "estimated_cost_usd": 350},
+        {"order": 4, "step_name": "DS-160 Form & US Embassy Appointment", "description": "Fill out DS-160 nonimmigrant visa application and pay MRV visa fee.", "estimated_cost_usd": 185},
+        {"order": 5, "step_name": "US Embassy F-1 Visa Interview", "description": "Attend in-person F-1 visa interview at US Consulate with financial & academic proof.", "estimated_cost_usd": 0},
+        {"order": 6, "step_name": "Visa Approval & Passport Collection", "description": "Receive approved F-1 visa stamp in passport.", "estimated_cost_usd": 0},
+        {"order": 7, "step_name": "Flight Booking & Campus Housing", "description": "Reserve on-campus or off-campus US housing, purchase flight, and pack for orientation.", "estimated_cost_usd": 850},
+    ],
+    "Ireland": [
+        {"order": 1, "step_name": "Document & Academic Portfolio Prep", "description": "Gather degree transcripts, CV, SOP, and English test certificates.", "estimated_cost_usd": 0},
+        {"order": 2, "step_name": "Irish University Application", "description": "Submit applications to Irish higher education institutions and secure offer letter.", "estimated_cost_usd": 60},
+        {"order": 3, "step_name": "Tuition Deposit & Proof of Funds", "description": "Transfer required tuition deposit and prepare bank statements (€10,000 living proof).", "estimated_cost_usd": 0},
+        {"order": 4, "step_name": "Irish Student Visa Application (AVATS)", "description": "Complete AVATS online visa form and submit physical document package to VFS Ireland.", "estimated_cost_usd": 100},
+        {"order": 5, "step_name": "Private Medical Insurance", "description": "Purchase Irish private health insurance policy required for visa approval.", "estimated_cost_usd": 200},
+        {"order": 6, "step_name": "Visa Decision & Stamping", "description": "Receive visa approval letter and stamped passport.", "estimated_cost_usd": 0},
+        {"order": 7, "step_name": "Flight Booking & Accommodation", "description": "Book flight to Dublin/Cork and secure student residence accommodation.", "estimated_cost_usd": 600},
+    ]
+}
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _match_course_key(interest: str) -> str:
@@ -426,6 +496,9 @@ def _score_countries(profile: dict) -> list:
     pr_pref = profile.get("pr_preference", False)
     timeline = profile.get("timeline", 12)
     marks = profile.get("marks", 0)
+    preferred_countries = profile.get("preferred_countries", [])
+    if isinstance(preferred_countries, str):
+        preferred_countries = [preferred_countries]
 
     scored = []
     for country, data in COUNTRY_DB.items():
@@ -479,6 +552,10 @@ def _score_countries(profile: dict) -> list:
         elif marks >= 50:
             score += 4
 
+        # 6. Preferred destination bonus (15 pts)
+        if any(p.lower() in country.lower() or country.lower() in p.lower() for p in preferred_countries if p):
+            score += 15
+
         scored.append({"country": country, "score": score, "data": data})
 
     scored.sort(key=lambda x: x["score"], reverse=True)
@@ -489,6 +566,12 @@ def _build_response(profile: dict, ranked: list) -> dict:
     course_key = _match_course_key(profile.get("course_interest", ""))
     course_info = COURSE_DB[course_key]
     budget = profile.get("budget", 0)
+    english = profile.get("english_score", 0)
+    marks = profile.get("marks", 0)
+    pr_pref = profile.get("pr_preference", False)
+    preferred_countries = profile.get("preferred_countries", [])
+    if isinstance(preferred_countries, str):
+        preferred_countries = [preferred_countries]
 
     top = ranked[0]
     country_name = top["country"]
@@ -523,18 +606,150 @@ def _build_response(profile: dict, ranked: list) -> dict:
         f"The {course_info['course']} at {course_by_country['university']} aligns well with your goals."
     )
 
-    # Calculate real profile-based visa success probability percentage
+    # Calculate real profile-based visa success probability percentage for top country
     top_score = top["score"]
     visa_success_percentage = min(98, max(58, round(top_score * 0.9 + 10)))
+
+    # Compute ranked list of countries with real comparison reasoning factors
+    ranked_countries = []
+    for idx, r in enumerate(ranked):
+        c_name = r["country"]
+        c_data = r["data"]
+        c_score = r["score"]
+        c_cost = c_data["avg_cost_usd"] + c_data["living_usd"]
+        c_visa_pct = min(98, max(50, round(c_score * 0.9 + 8)))
+
+        factors = []
+
+        # 1. Budget Factor
+        if budget >= c_cost:
+            factors.append({
+                "factor": "Budget",
+                "status": "pass",
+                "text": f"Budget: ✓ Fits your range (${budget:,}/yr vs est. ${c_cost:,}/yr)"
+            })
+        elif budget >= c_cost * 0.8:
+            factors.append({
+                "factor": "Budget",
+                "status": "warn",
+                "text": f"Budget: ⚠ Slightly exceeds your budget by ${(c_cost - budget):,}/yr (Est. ${c_cost:,}/yr)"
+            })
+        else:
+            factors.append({
+                "factor": "Budget",
+                "status": "fail",
+                "text": f"Budget: ✗ Exceeds your budget by ${(c_cost - budget):,}/yr (Est. ${c_cost:,}/yr vs your ${budget:,}/yr)"
+            })
+
+        # 2. English Requirement Factor
+        eng_min = c_data["english_min"]
+        if eng_min == 0:
+            factors.append({
+                "factor": "English",
+                "status": "pass",
+                "text": "English: ✓ No mandatory IELTS requirement"
+            })
+        elif english >= eng_min:
+            factors.append({
+                "factor": "English",
+                "status": "pass",
+                "text": f"English: ✓ Meets requirement (Your score {english} vs min {eng_min} required)"
+            })
+        else:
+            factors.append({
+                "factor": "English",
+                "status": "fail",
+                "text": f"English: ✗ Below requirement (Your score {english} vs min {eng_min} required)"
+            })
+
+        # 3. Academic Marks Factor
+        if marks >= 65:
+            factors.append({
+                "factor": "Academic GPA",
+                "status": "pass",
+                "text": f"Academic GPA: ✓ Meets competitive entry criteria ({marks}%)"
+            })
+        elif marks > 0:
+            factors.append({
+                "factor": "Academic GPA",
+                "status": "warn",
+                "text": f"Academic GPA: ⚠ Below average entry threshold ({marks}%), conditional offer may apply"
+            })
+        else:
+            factors.append({
+                "factor": "Academic GPA",
+                "status": "pass",
+                "text": "Academic GPA: ✓ Profile evaluated"
+            })
+
+        # 4. PR Pathway Factor
+        if pr_pref and c_data["pr_friendly"]:
+            factors.append({
+                "factor": "PR Pathway",
+                "status": "pass",
+                "text": "PR Pathway: ✓ Post-study PR pathways & work permits available"
+            })
+        elif pr_pref and not c_data["pr_friendly"]:
+            factors.append({
+                "factor": "PR Pathway",
+                "status": "fail",
+                "text": "PR Pathway: ✗ Limited direct PR pathways (Work visa focused)"
+            })
+        else:
+            factors.append({
+                "factor": "Work Visa",
+                "status": "pass",
+                "text": "Work Visa: ✓ Post-study stay-back visa options available"
+            })
+
+        # 5. Stated Destination Preference Factor
+        if any(p.lower() in c_name.lower() or c_name.lower() in p.lower() for p in preferred_countries if p):
+            factors.append({
+                "factor": "Preference",
+                "status": "pass",
+                "text": "Destination Match: ✓ Stated as your target preference"
+            })
+
+        # Real summary explanation per country
+        c_strengths = ", ".join(c_data["strengths"][:2])
+        if idx == 0:
+            summary = f"Top ranked destination for your profile. Key strengths: {c_strengths}."
+        elif factors[0]["status"] == "fail":
+            summary = f"Ranked #{idx+1}: Total estimated expenses (${c_cost:,}/yr) exceed your specified budget by ${(c_cost - budget):,}/yr."
+        elif factors[1]["status"] == "fail":
+            summary = f"Ranked #{idx+1}: Your English score ({english}) is below the required minimum ({c_data['english_min']} IELTS)."
+        else:
+            summary = f"Ranked #{idx+1}: Good alternative destination offering {c_strengths}."
+
+        country_obj = {
+            "rank": idx + 1,
+            "country": c_name,
+            "score": c_score,
+            "visa_success_percentage": c_visa_pct,
+            "pr_friendly": c_data["pr_friendly"],
+            "avg_cost_usd": c_cost,
+            "tuition_usd": c_data["avg_cost_usd"],
+            "living_usd": c_data["living_usd"],
+            "reasoning_summary": summary,
+            "reasoning_factors": factors,
+        }
+
+        # Attach checklist ONLY to the #1 ranked country
+        if idx == 0:
+            country_obj["checklist"] = COUNTRY_CHECKLIST_TEMPLATES.get(c_name, DEFAULT_CHECKLIST)
+
+        ranked_countries.append(country_obj)
 
     destination_breakdown = [
         {
             "name": r["country"],
-            "rate": min(98, max(50, round(r["score"] * 0.9 + 8))),
+            "rate": r["visa_success_percentage"],
             "score": r["score"],
         }
-        for r in ranked[:4]
+        for r in ranked_countries[:4]
     ]
+
+    top_country_checklist = COUNTRY_CHECKLIST_TEMPLATES.get(country_name, DEFAULT_CHECKLIST)
 
     return {
         "best_country": country_name,
@@ -545,9 +760,11 @@ def _build_response(profile: dict, ranked: list) -> dict:
         "top_universities": top_universities,
         "estimated_cost": estimated_cost,
         "reason_for_recommendation": reason,
+        "ranked_countries": ranked_countries,
+        "top_country_checklist": top_country_checklist,
         "alternative_countries": [
-            {"country": r["country"], "reason": f"Strong match with score {r['score']}"}
-            for r in ranked[1:4]
+            {"country": r["country"], "reason": r["reasoning_summary"]}
+            for r in ranked_countries[1:4]
         ],
         "pr_pathway_available": country_data["pr_friendly"],
         "country_language": country_data["language"],

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment
+    StudentProfile, ProcessStep, Payment, VideoTestimonial
 )
 
 
@@ -200,6 +200,23 @@ class StudentEnrollmentSerializer(serializers.Serializer):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value
+
+
+class VideoTestimonialSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VideoTestimonial
+        fields = [
+            'id', 'student_name', 'video_url', 'thumbnail_url', 'public_id',
+            'uploaded_by', 'uploaded_by_name', 'uploaded_at', 'is_published', 'display_order'
+        ]
+        read_only_fields = ['uploaded_by', 'uploaded_at', 'video_url', 'thumbnail_url', 'public_id']
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return 'System'
 
 
 

@@ -23,9 +23,10 @@ import {
   Compass,
   Star,
   Check,
-  Send
+  Send,
+  Play
 } from 'lucide-react';
-import { submitContact } from '../api';
+import { submitContact, getPublicVideoTestimonials } from '../api';
 import CountryHoverCard from '../components/CountryHoverCard';
 import VisaGauge2D from '../components/VisaGauge2D';
 import { COUNTRY_VIDEOS } from '../data/countryVideos';
@@ -63,6 +64,13 @@ export default function Home() {
   const [contactSent, setContactSent] = useState(false);
   const [contactLoading, setContactLoading] = useState(false);
   const [activeCardId, setActiveCardId] = useState(null);
+  const [videoTestimonials, setVideoTestimonials] = useState([]);
+
+  useEffect(() => {
+    getPublicVideoTestimonials()
+      .then(res => setVideoTestimonials(res.data || []))
+      .catch(() => setVideoTestimonials([]));
+  }, []);
   
   // Hero Video Quality & Mobile Stability State
   const [isVideoReady, setIsVideoReady] = useState(false);
@@ -164,9 +172,9 @@ export default function Home() {
             </video>
           )}
 
-          {/* Mobile & Desktop Readability Gradient Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-b from-navy-950/80 via-navy-950/55 to-navy-950/30 lg:bg-gradient-to-r lg:from-navy-950/85 lg:via-navy-950/50 lg:to-transparent z-10 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-navy-950/80 to-transparent z-10 pointer-events-none" />
+          {/* Mobile & Desktop Readability Gradient Overlays - Lightened for Brighter Aesthetic */}
+          <div className="absolute inset-0 bg-gradient-to-b from-navy-950/65 via-navy-950/40 to-navy-950/15 lg:bg-gradient-to-r lg:from-navy-950/70 lg:via-navy-950/35 lg:to-transparent z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-navy-950/60 to-transparent z-10 pointer-events-none" />
         </div>
 
         {/* ── Foreground Content Column (Left-Aligned Overlaid Layout) ── */}
@@ -177,31 +185,30 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            {/* Header Pill */}
-            <div className="inline-flex items-center gap-2.5 bg-white/10 border border-white/20 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg font-display">
-              <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
-              AI-Powered Guidance · Birgunj Head Office, Nepal
+            {/* Header Pill Badge */}
+            <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 backdrop-blur-md text-slate-100 text-xs font-semibold px-4 py-2 rounded-full shadow-md font-display">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Birgunj Head Office, Nepal · Official Consultancy</span>
             </div>
 
-            {/* Main Heading */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.15] text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.45)] font-display">
-              Check Your Study Visa<br />
-              <span className="bg-gradient-to-r from-rose-400 via-amber-300 to-amber-200 bg-clip-text text-transparent drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]">
-                Success Chances
-              </span><br />
-              in 30 Seconds
+            {/* Main Heading - Professional & Trustworthy */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.15] text-white drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] font-display">
+              Your Trusted Partner for<br />
+              <span className="text-amber-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                Global Education
+              </span>
             </h1>
 
             {/* Subtitle */}
             <p className="text-base sm:text-lg lg:text-xl text-slate-100 font-medium max-w-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)] leading-relaxed font-sans">
-              Get personalized country and university recommendations based on your GPA, budget, and career goals — free, instant, and AI-analyzed.
+              Personalized university matching and expert visa guidance for Nepali students — transparent, reliable, and backed by a proven track record.
             </p>
 
-            {/* CTA Button Group */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-2">
+            {/* CTA Button Group - Clear Visual Hierarchy on Mobile & Desktop */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 pt-2">
               <Link
                 to="/apply"
-                className="btn-accent text-base sm:text-lg font-bold shadow-xl shadow-crimson-600/30 px-8 py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform"
+                className="btn-accent text-base sm:text-lg font-bold shadow-xl shadow-crimson-600/30 px-7 py-3.5 sm:px-8 sm:py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform"
               >
                 <Sparkles className="w-5 h-5 text-amber-300" />
                 Start Free Assessment
@@ -209,12 +216,12 @@ export default function Home() {
               </Link>
 
               <a
-                href={`https://wa.me/${wa}?text=${encodeURIComponent('Hi! I checked my visa chance and need guidance.')}`}
+                href={`https://wa.me/${wa}?text=${encodeURIComponent('Hi! I want expert study abroad guidance.')}`}
                 target="_blank"
                 rel="noreferrer"
-                className="btn-green text-base sm:text-lg font-semibold shadow-xl px-8 py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform"
+                className="bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-400/40 text-emerald-300 text-sm sm:text-base font-medium px-5 py-2.5 sm:px-7 sm:py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all hover:border-emerald-400/70"
               >
-                <MessageSquare className="w-5 h-5 fill-current" />
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
                 Talk to Expert on WhatsApp
               </a>
             </div>
@@ -455,8 +462,44 @@ export default function Home() {
             <p className="section-subtitle">Real feedback from students studying across the globe.</p>
           </div>
 
-          {/* DO NOT add fabricated testimonial names/quotes here — placeholder only until real client data is provided */}
-          {TESTIMONIALS_DATA.isPlaceholder || !TESTIMONIALS_DATA.items || TESTIMONIALS_DATA.items.length === 0 ? (
+          {/* 1+ Published Video Testimonials Display */}
+          {videoTestimonials.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {videoTestimonials.map((v, i) => (
+                <motion.div
+                  key={v.id}
+                  className="bg-slate-900 rounded-2xl overflow-hidden shadow-xl border border-slate-800 flex flex-col justify-between group hover:border-slate-700 transition-all"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: i * 0.1 }}
+                >
+                  <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+                    <video
+                      src={v.video_url}
+                      poster={v.thumbnail_url}
+                      controls
+                      preload="none"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-t border-slate-800/80">
+                    <div>
+                      <p className="font-display font-bold text-sm text-white">
+                        {v.student_name || 'Anonymous Student'}
+                      </p>
+                      <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5 font-sans">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Verified Student Video
+                      </span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-navy-800 text-amber-400 flex items-center justify-center text-xs font-bold font-display border border-navy-700 shadow-sm">
+                      AIEC
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : TESTIMONIALS_DATA.isPlaceholder || !TESTIMONIALS_DATA.items || TESTIMONIALS_DATA.items.length === 0 ? (
             <div className="max-w-3xl mx-auto">
               <motion.div
                 className="bg-slate-50/80 rounded-2xl p-8 sm:p-12 border border-slate-200/80 shadow-sm text-center relative overflow-hidden"

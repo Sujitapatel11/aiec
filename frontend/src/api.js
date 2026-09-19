@@ -62,5 +62,14 @@ export const deleteProcessStep    = (stepId)         => api.delete(`/steps/${ste
 export const addStepPayment       = (stepId, data)   => api.post(`/steps/${stepId}/payments/`, data)
 export const getStudentPortalMe   = ()               => api.get('/student-portal/my-profile/')
 
+// Video Testimonials API
+export const getPublicVideoTestimonials = ()           => api.get('/testimonials/video/public/')
+export const getVideoTestimonials       = ()           => api.get('/testimonials/video/')
+export const uploadVideoTestimonial      = (formData)   => api.post('/testimonials/video/upload/', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
+export const updateVideoTestimonial      = (id, data)   => api.patch(`/testimonials/video/${id}/`, data)
+export const deleteVideoTestimonial      = (id)         => api.delete(`/testimonials/video/${id}/`)
+
 export default api
 

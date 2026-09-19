@@ -6,10 +6,13 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.db.models import Count
 import secrets
+import os
+import threading
+import re
 
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, DEFAULT_CHECKLIST_TEMPLATE
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, DEFAULT_CHECKLIST_TEMPLATE
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer,
@@ -17,7 +20,11 @@ from .serializers import (
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
     StudentProfileSerializer, StudentEnrollmentSerializer,
-    ProcessStepSerializer, PaymentSerializer
+    ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer
+)
+from . import cloudinary_service
+from .cloudinary_service import (
+    is_cloudinary_configured, upload_video_to_cloudinary, delete_video_from_cloudinary
 )
 from .ai_service import get_ai_recommendations
 from .recommendation_service import get_profile_recommendation
@@ -747,4 +754,133 @@ def student_portal_me(request):
 
     serializer = StudentProfileSerializer(profile)
     return Response(serializer.data)
+
+
+# ── Video Testimonials API ─────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_video_testimonials(request):
+    """
+    Public endpoint for homepage: returns only is_published=True video testimonials.
+    """
+    videos = VideoTestimonial.objects.filter(is_published=True)
+    serializer = VideoTestimonialSerializer(videos, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manage_video_testimonials(request):
+    """
+    List all video testimonials (published + drafts). Accessible to Admin + Staff.
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    videos = VideoTestimonial.objects.all()
+    serializer = VideoTestimonialSerializer(videos, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_video_testimonial(request):
+    """
+    Upload a video testimonial file to Cloudinary. Accessible to Admin + Staff.
+    Validates file format (MP4, MOV, WEBM, AVI, MKV) and max file size (100MB).
+    Gracefully returns error if Cloudinary is not configured in backend/.env.
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    video_file = request.FILES.get('file') or request.FILES.get('video')
+    if not video_file:
+        return Response({'error': 'No video file provided for upload.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 1. File extension validation
+    ext = os.path.splitext(video_file.name)[1].lower()
+    allowed_exts = ['.mp4', '.mov', '.webm', '.avi', '.mkv']
+    if ext not in allowed_exts:
+        return Response(
+            {'error': f"Invalid file format '{ext}'. Only video files (MP4, MOV, WEBM, AVI, MKV) are supported."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 2. File size validation (Max 100MB)
+    max_size_bytes = 100 * 1024 * 1024
+    if video_file.size > max_size_bytes:
+        return Response(
+            {'error': f"File size exceeds limit (Max 100MB). Your file is {round(video_file.size / (1024*1024), 1)}MB."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 3. Check Cloudinary Configuration
+    if not cloudinary_service.is_cloudinary_configured():
+        return Response(
+            {'error': 'Video storage is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 4. Upload to Cloudinary
+    try:
+        res = cloudinary_service.upload_video_to_cloudinary(video_file)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    student_name = request.data.get('student_name', '').strip()
+    is_published_raw = request.data.get('is_published', 'true')
+    is_published = str(is_published_raw).lower() in ['true', '1', 'yes']
+    display_order = int(request.data.get('display_order', 0))
+
+    testimonial = VideoTestimonial.objects.create(
+        student_name=student_name,
+        video_url=res['video_url'],
+        thumbnail_url=res['thumbnail_url'],
+        public_id=res['public_id'],
+        uploaded_by=request.user,
+        is_published=is_published,
+        display_order=display_order
+    )
+
+    return Response(VideoTestimonialSerializer(testimonial).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_video_testimonial_detail(request, pk):
+    """
+    PATCH: Toggle is_published or update details (Admin + Staff).
+    DELETE: Delete record AND remove file from Cloudinary (Admin ONLY - 403 for Staff).
+    """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+        return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        testimonial = VideoTestimonial.objects.get(pk=pk)
+    except VideoTestimonial.DoesNotExist:
+        return Response({'error': 'Video testimonial record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PATCH':
+        if 'is_published' in request.data:
+            testimonial.is_published = bool(request.data['is_published'])
+        if 'student_name' in request.data:
+            testimonial.student_name = str(request.data['student_name']).strip()
+        if 'display_order' in request.data:
+            testimonial.display_order = int(request.data['display_order'])
+        testimonial.save()
+        return Response(VideoTestimonialSerializer(testimonial).data)
+
+    if request.method == 'DELETE':
+        # DELETE ACTION IS ADMIN ONLY (least-privilege enforcement)
+        if not request.user.is_superuser:
+            return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Delete asset from Cloudinary
+        delete_video_from_cloudinary(testimonial.public_id)
+
+        # Delete database record
+        testimonial.delete()
+
+        return Response({'message': 'Video testimonial deleted successfully.'})
 
