@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { getStudentPortalMe } from '../api'
+import { getStudentPortalMe, uploadStudentDocument } from '../api'
+
+const REQUIRED_DOC_TYPES = [
+  { type: 'Passport', label: 'Valid Passport', desc: 'Front & back bio pages' },
+  { type: '10th Marksheet', label: '10th Marksheet / SLC', desc: 'Secondary school mark sheet' },
+  { type: '12th Marksheet', label: '12th Marksheet / Transcript', desc: 'Higher secondary certificate' },
+  { type: 'IELTS/English Score', label: 'English Proficiency Test', desc: 'IELTS / PTE / TOEFL score sheet' },
+  { type: 'Bank Statement', label: 'Bank Financial Statement', desc: 'Proof of funds for visa' },
+  { type: 'Photo', label: 'Passport Photo', desc: 'Recent passport-size photo' },
+  { type: 'Other', label: 'Additional Documents', desc: 'SOP, recommendation letters, work exp' },
+]
 
 const FLAGS = {
   Canada:'🇨🇦', Australia:'🇦🇺', 'United Kingdom':'🇬🇧', UK:'🇬🇧',
@@ -32,6 +42,47 @@ export default function StudentPortal() {
   const [profile, setProfile]   = useState(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
+
+  // Document upload state
+  const [uploadingDocType, setUploadingDocType] = useState(null)
+  const [uploadNotice, setUploadNotice]         = useState('')
+  const [uploadError, setUploadError]           = useState('')
+
+  const handleDocumentUpload = async (docType, file) => {
+    if (!file) return
+    setUploadNotice('')
+    setUploadError('')
+
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+    if (!['.pdf', '.jpg', '.jpeg', '.png'].includes(ext)) {
+      setUploadError(`Invalid document format (${ext}). Only PDF, JPG, and PNG files are supported.`)
+      return
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError(`File size exceeds 15MB limit (${(file.size / (1024*1024)).toFixed(1)}MB).`)
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('document_type', docType)
+    if (profile?.id) {
+      formData.append('student_id', profile.id)
+    }
+
+    setUploadingDocType(docType)
+    try {
+      await uploadStudentDocument(formData)
+      setUploadNotice(`${docType} document uploaded successfully!`)
+      setTimeout(() => setUploadNotice(''), 4000)
+      const res = await getStudentPortalMe()
+      setProfile(res.data)
+    } catch (err) {
+      setUploadError(err.response?.data?.error || `Failed to upload ${docType} document.`)
+    } finally {
+      setUploadingDocType(null)
+    }
+  }
 
   useEffect(() => {
     if (!token || role !== 'student') return
@@ -126,9 +177,16 @@ export default function StudentPortal() {
                     🎓
                   </div>
                   <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                      Enrolled Student Portal
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                        Enrolled Student Portal
+                      </span>
+                      {profile.student_id && (
+                        <span className="text-[10px] font-mono font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-md">
+                          ID: {profile.student_id}
+                        </span>
+                      )}
+                    </div>
                     <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
                       {profile.full_name}
                     </h2>
@@ -185,6 +243,148 @@ export default function StudentPortal() {
                   ${Number(profile.pending_balance || 0).toLocaleString()}
                 </p>
                 <p className="text-[11px] text-amber-500/80 mt-1">Remaining balance due</p>
+              </div>
+            </div>
+
+            {/* My Documents & Compliance Checklist */}
+            <div className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-4 gap-2">
+                <div>
+                  <h3 className="text-xl font-extrabold text-white flex items-center gap-2">
+                    <span>📄 My Documents & Compliance</span>
+                    <span className="text-xs bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2.5 py-0.5 rounded-full font-bold">
+                      PDF, JPG, PNG (Max 15MB)
+                    </span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Upload required admission and visa documents for verification</p>
+                </div>
+              </div>
+
+              {uploadNotice && (
+                <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold px-4 py-3 rounded-2xl flex items-center justify-between">
+                  <span>✅ {uploadNotice}</span>
+                  <button onClick={() => setUploadNotice('')} className="text-emerald-300 font-extrabold">✕</button>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="bg-red-500/20 border border-red-500/40 text-red-200 text-xs font-bold px-4 py-3 rounded-2xl flex items-center justify-between">
+                  <span>⚠️ {uploadError}</span>
+                  <button onClick={() => setUploadError('')} className="text-red-300 font-extrabold">✕</button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {REQUIRED_DOC_TYPES.map((docItem) => {
+                  const existingDoc = profile.documents?.find(d => d.document_type === docItem.type)
+                  const isUploading = uploadingDocType === docItem.type
+
+                  return (
+                    <div
+                      key={docItem.type}
+                      className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-3 hover:border-white/20 transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h4 className="font-bold text-white text-sm">{docItem.label}</h4>
+                            <p className="text-[11px] text-gray-400">{docItem.desc}</p>
+                          </div>
+
+                          {/* Status Badge */}
+                          {!existingDoc ? (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
+                              Not Uploaded
+                            </span>
+                          ) : existingDoc.verification_status === 'pending' ? (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap flex items-center gap-1">
+                              <span>⏳</span> Pending Review
+                            </span>
+                          ) : existingDoc.verification_status === 'verified' ? (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 whitespace-nowrap flex items-center gap-1">
+                              <span>✅</span> Verified
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 whitespace-nowrap flex items-center gap-1">
+                              <span>❌</span> Rejected
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Existing File Info */}
+                        {existingDoc && (
+                          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/10 text-xs flex items-center justify-between gap-2">
+                            <span className="text-gray-300 font-mono text-[11px] truncate max-w-[180px]">
+                              📎 {existingDoc.file_name || 'Uploaded Document'}
+                            </span>
+                            <a
+                              href={existingDoc.file_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline whitespace-nowrap"
+                            >
+                              View File ↗
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Rejection Reason Alert */}
+                        {existingDoc?.verification_status === 'rejected' && (
+                          <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-xl space-y-1">
+                            <p className="text-[11px] font-extrabold text-red-300 uppercase tracking-wider flex items-center gap-1">
+                              <span>⚠️</span> Counselor Feedback / Rejection Reason:
+                            </p>
+                            <p className="text-xs text-red-200 bg-red-950/40 p-2 rounded-lg border border-red-500/20">
+                              {existingDoc.rejection_reason || 'Please re-upload a clear, readable copy of this document.'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* File Upload Controls */}
+                      <div className="pt-2 border-t border-white/10">
+                        {existingDoc?.verification_status === 'verified' ? (
+                          <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                            <span>🔒</span> Document verified by counselor. No further action needed.
+                          </p>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              disabled={isUploading}
+                              id={`file-input-${docItem.type}`}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleDocumentUpload(docItem.type, file)
+                              }}
+                              className="hidden"
+                            />
+                            <label
+                              htmlFor={`file-input-${docItem.type}`}
+                              className={`w-full py-2 px-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition-all border border-white/20 cursor-pointer text-center flex items-center justify-center gap-2 ${
+                                isUploading ? 'opacity-50 pointer-events-none' : ''
+                              }`}
+                            >
+                              {isUploading ? (
+                                <>
+                                  <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                  <span>Uploading...</span>
+                                </>
+                              ) : existingDoc?.verification_status === 'rejected' ? (
+                                <span>🔄 Re-upload {docItem.label}</span>
+                              ) : existingDoc ? (
+                                <span>📤 Replace {docItem.label}</span>
+                              ) : (
+                                <span>📤 Upload {docItem.label}</span>
+                              )}
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 

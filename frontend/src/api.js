@@ -71,5 +71,13 @@ export const uploadVideoTestimonial      = (formData)   => api.post('/testimonia
 export const updateVideoTestimonial      = (id, data)   => api.patch(`/testimonials/video/${id}/`, data)
 export const deleteVideoTestimonial      = (id)         => api.delete(`/testimonials/video/${id}/`)
 
+// Student Documents API
+export const uploadStudentDocument = (formData) => api.post('/documents/upload/', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
+export const getStudentDocuments   = (studentId) => api.get(`/documents/${studentId ? `?student_id=${studentId}` : ''}`)
+export const verifyStudentDocument  = (id, data) => api.patch(`/documents/${id}/status/`, data)
+export const deleteStudentDocument  = (id)       => api.delete(`/documents/${id}/`)
+
 export default api
 

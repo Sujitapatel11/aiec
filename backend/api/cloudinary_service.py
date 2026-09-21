@@ -68,3 +68,49 @@ def delete_video_from_cloudinary(public_id):
     except Exception as e:
         print(f"Cloudinary deletion error: {e}")
         return False
+
+
+def upload_document_to_cloudinary(file_obj, folder="aiec/student_documents"):
+    """
+    Uploads a student document (PDF, JPG, PNG) to Cloudinary.
+    Returns dict with file_url and public_id.
+    Raises ValueError if Cloudinary is not configured.
+    """
+    if not is_cloudinary_configured():
+        raise ValueError("Document storage is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env.")
+
+    configure_cloudinary()
+
+    response = cloudinary.uploader.upload(
+        file_obj,
+        resource_type="auto",
+        folder=folder
+    )
+
+    file_url = response.get('secure_url') or response.get('url')
+    public_id = response.get('public_id', '')
+
+    return {
+        'file_url': file_url,
+        'public_id': public_id
+    }
+
+
+def delete_document_from_cloudinary(public_id):
+    """
+    Deletes a document asset from Cloudinary using public_id.
+    Tries image resource_type first, then raw if needed.
+    """
+    if not is_cloudinary_configured() or not public_id:
+        return False
+
+    configure_cloudinary()
+    try:
+        res = cloudinary.uploader.destroy(public_id, resource_type="image")
+        if res.get('result') == 'not found':
+            res = cloudinary.uploader.destroy(public_id, resource_type="raw")
+        return res.get('result') in ['ok', 'not found']
+    except Exception as e:
+        print(f"Cloudinary document deletion error: {e}")
+        return False
+

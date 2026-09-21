@@ -1,5 +1,6 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 DEFAULT_CHECKLIST_TEMPLATE = [
     {"step_name": "Document Collection", "order": 1},
@@ -10,6 +11,7 @@ DEFAULT_CHECKLIST_TEMPLATE = [
     {"step_name": "Visa Approval", "order": 6},
     {"step_name": "Pre-departure", "order": 7},
 ]
+
 
 
 class Lead(models.Model):
@@ -108,7 +110,26 @@ class Course(models.Model):
 
 # ── Student Enrollment & Process Tracking System ───────────────────────────
 
+class StudentIdSequence(models.Model):
+    year = models.IntegerField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"StudentIdSequence({self.year}: {self.last_number})"
+
+
+def generate_student_id(year=None):
+    if year is None:
+        year = timezone.now().year
+    with transaction.atomic():
+        seq, _ = StudentIdSequence.objects.select_for_update().get_or_create(year=year)
+        seq.last_number += 1
+        seq.save()
+        return f"AIEC-{seq.year}-{seq.last_number:04d}"
+
+
 class StudentProfile(models.Model):
+    student_id = models.CharField(max_length=50, unique=True, null=True, blank=True, db_index=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     full_name = models.CharField(max_length=200)
     phone = models.CharField(max_length=30)
@@ -119,11 +140,18 @@ class StudentProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        if not self.student_id:
+            year = self.enrollment_date.year if self.enrollment_date else timezone.now().year
+            self.student_id = generate_student_id(year=year)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Student: {self.full_name} ({self.destination_country})"
+        return f"Student [{self.student_id}]: {self.full_name} ({self.destination_country})"
 
     class Meta:
         ordering = ['-created_at']
+
 
 
 class ProcessStep(models.Model):
@@ -179,4 +207,41 @@ class VideoTestimonial(models.Model):
 
     class Meta:
         ordering = ['display_order', '-uploaded_at', '-id']
+
+
+class StudentDocument(models.Model):
+    DOCUMENT_TYPES = [
+        ('Passport', 'Passport'),
+        ('10th Marksheet', '10th Marksheet'),
+        ('12th Marksheet', '12th Marksheet'),
+        ('IELTS/English Score', 'IELTS / English Score'),
+        ('Bank Statement', 'Bank Statement'),
+        ('Photo', 'Passport Photo'),
+        ('Other', 'Other Document'),
+    ]
+
+    VERIFICATION_STATUSES = [
+        ('pending', 'Pending Review'),
+        ('verified', 'Verified'),
+        ('rejected', 'Rejected'),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=100, choices=DOCUMENT_TYPES, default='Other')
+    file_url = models.URLField(max_length=500)
+    public_id = models.CharField(max_length=200, blank=True, default='')
+    file_name = models.CharField(max_length=255, blank=True, default='')
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_documents')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUSES, default='pending')
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_documents')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.document_type} [{self.verification_status}]"
+
+    class Meta:
+        ordering = ['-uploaded_at', '-id']
+
 

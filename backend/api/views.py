@@ -12,7 +12,7 @@ import re
 
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, VideoTestimonial, DEFAULT_CHECKLIST_TEMPLATE
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument, DEFAULT_CHECKLIST_TEMPLATE
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer,
@@ -20,11 +20,12 @@ from .serializers import (
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
     StudentProfileSerializer, StudentEnrollmentSerializer,
-    ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer
+    ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer
 )
 from . import cloudinary_service
 from .cloudinary_service import (
-    is_cloudinary_configured, upload_video_to_cloudinary, delete_video_from_cloudinary
+    is_cloudinary_configured, upload_video_to_cloudinary, delete_video_from_cloudinary,
+    upload_document_to_cloudinary, delete_document_from_cloudinary
 )
 from .ai_service import get_ai_recommendations
 from .recommendation_service import get_profile_recommendation
@@ -551,6 +552,7 @@ def enroll_student(request):
     # Return profile data + generated password ONCE (never logged in plaintext)
     return Response({
         'id': profile.id,
+        'student_id': profile.student_id,
         'user_id': user.id,
         'username': user.username,
         'full_name': profile.full_name,
@@ -569,7 +571,7 @@ def manage_students(request):
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
-    students = StudentProfile.objects.all().order_by('-created_at')
+    students = StudentProfile.objects.prefetch_related('process_steps__payments', 'user', 'enrolled_by').all().order_by('-created_at')
     serializer = StudentProfileSerializer(students, many=True)
     return Response(serializer.data)
 
@@ -883,4 +885,179 @@ def manage_video_testimonial_detail(request, pk):
         testimonial.delete()
 
         return Response({'message': 'Video testimonial deleted successfully.'})
+
+
+# ── Student Documents API ──────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_student_document(request):
+    """
+    Upload a document (PDF, JPG, PNG - Max 15MB) for a student.
+    Allowed for: the student themselves (their own profile) OR Staff/Admin (for any student).
+    """
+    doc_file = request.FILES.get('file') or request.FILES.get('document')
+    if not doc_file:
+        return Response({'error': 'No document file provided for upload.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    document_type = request.data.get('document_type', 'Other').strip()
+    target_student_id = request.data.get('student_id', None)
+
+    # Resolve target student profile
+    is_staff_or_admin = (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists())
+    is_student_user = StudentProfile.objects.filter(user=request.user).exists()
+
+    if not (is_staff_or_admin or is_student_user):
+        return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if is_student_user and not is_staff_or_admin:
+        student = request.user.student_profile
+        # If student_id passed, verify it matches
+        if target_student_id:
+            if str(student.id) != str(target_student_id) and str(student.student_id) != str(target_student_id):
+                return Response({'error': 'You can only upload documents for your own student profile.'}, status=status.HTTP_403_FORBIDDEN)
+    else:
+        # Staff/Admin uploading
+        if not target_student_id:
+            return Response({'error': 'student_id is required for staff document upload.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if str(target_student_id).isdigit():
+                student = StudentProfile.objects.get(pk=target_student_id)
+            else:
+                student = StudentProfile.objects.get(student_id=target_student_id)
+        except StudentProfile.DoesNotExist:
+            return Response({'error': 'Student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # 1. File format validation (PDF, JPG, JPEG, PNG)
+    ext = os.path.splitext(doc_file.name)[1].lower()
+    allowed_exts = ['.pdf', '.jpg', '.jpeg', '.png']
+    if ext not in allowed_exts:
+        return Response(
+            {'error': f"Invalid document format '{ext}'. Only PDF, JPG, and PNG files are supported."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 2. File size validation (Max 15MB)
+    max_size_bytes = 15 * 1024 * 1024
+    if doc_file.size > max_size_bytes:
+        return Response(
+            {'error': f"File size exceeds limit (Max 15MB). Your file is {round(doc_file.size / (1024*1024), 1)}MB."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 3. Check Cloudinary Configuration
+    if not is_cloudinary_configured():
+        return Response(
+            {'error': 'Document storage is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 4. Upload to Cloudinary
+    try:
+        res = upload_document_to_cloudinary(doc_file)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    doc = StudentDocument.objects.create(
+        student=student,
+        document_type=document_type,
+        file_url=res['file_url'],
+        public_id=res['public_id'],
+        file_name=doc_file.name,
+        uploaded_by=request.user,
+        verification_status='pending'
+    )
+
+    return Response(StudentDocumentSerializer(doc).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_student_documents(request, student_id=None):
+    """
+    List student documents.
+    Students see only their own documents. Staff/Admin see student's or all documents.
+    """
+    is_staff_or_admin = (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists())
+    is_student_user = StudentProfile.objects.filter(user=request.user).exists()
+
+    if is_student_user and not is_staff_or_admin:
+        docs = request.user.student_profile.documents.all()
+    elif is_staff_or_admin:
+        target_id = student_id or request.query_params.get('student_id')
+        if target_id:
+            try:
+                if str(target_id).isdigit():
+                    student = StudentProfile.objects.get(pk=target_id)
+                else:
+                    student = StudentProfile.objects.get(student_id=target_id)
+                docs = student.documents.all()
+            except StudentProfile.DoesNotExist:
+                return Response({'error': 'Student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            docs = StudentDocument.objects.all()
+    else:
+        return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = StudentDocumentSerializer(docs, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def verify_student_document(request, pk):
+    """
+    Verify or reject a student document. Staff/Admin ONLY (Students receive 403).
+    """
+    from django.utils import timezone
+
+    is_staff_or_admin = (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists())
+    if not is_staff_or_admin:
+        return Response({'error': 'Staff or Admin permissions required to verify documents.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        doc = StudentDocument.objects.get(pk=pk)
+    except StudentDocument.DoesNotExist:
+        return Response({'error': 'Student document record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    new_status = request.data.get('verification_status', doc.verification_status).strip().lower()
+    if new_status not in ['verified', 'rejected', 'pending']:
+        return Response({'error': "Invalid status. Must be 'verified', 'rejected', or 'pending'."}, status=status.HTTP_400_BAD_REQUEST)
+
+    doc.verification_status = new_status
+    doc.verified_by = request.user
+    doc.verified_at = timezone.now()
+
+    if new_status == 'rejected':
+        doc.rejection_reason = request.data.get('rejection_reason', '').strip()
+    else:
+        doc.rejection_reason = ''
+
+    doc.save()
+    return Response(StudentDocumentSerializer(doc).data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_student_document(request, pk):
+    """
+    Delete a student document. Admin ONLY (Staff receive 403).
+    Removes database record AND deletes Cloudinary asset.
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        doc = StudentDocument.objects.get(pk=pk)
+    except StudentDocument.DoesNotExist:
+        return Response({'error': 'Student document record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Delete asset from Cloudinary
+    delete_document_from_cloudinary(doc.public_id)
+
+    # Delete DB record
+    doc.delete()
+
+    return Response({'message': 'Student document deleted successfully.'})
+
 

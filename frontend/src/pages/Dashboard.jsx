@@ -4,7 +4,8 @@ import {
   getLeads, getDashboardStats, updateLead, adminLogout,
   getStudents, getStudentDetail, enrollStudent, deleteStudent,
   addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment,
-  getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial
+  getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial,
+  uploadStudentDocument, verifyStudentDocument, deleteStudentDocument
 } from '../api'
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -193,6 +194,7 @@ export default function Dashboard() {
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [enrollModal, setEnrollModal]     = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState('')
+  const [generatedStudentId, setGeneratedStudentId] = useState('')
   const [copied, setCopied]               = useState(false)
 
   // Custom step modal & payment modal
@@ -205,6 +207,14 @@ export default function Dashboard() {
   const [stepForm, setStepForm]           = useState({ step_name: '', estimated_cost: 0, due_date: '', notes: '' })
   const [paymentForm, setPaymentForm]     = useState({ amount: '', notes: '' })
   const [actionNotice, setActionNotice]   = useState('')
+
+  // Document management state
+  const [rejectModalDoc, setRejectModalDoc]   = useState(null)
+  const [rejectReasonInput, setRejectReasonInput] = useState('')
+  const [staffDocType, setStaffDocType]     = useState('Passport')
+  const [staffDocFile, setStaffDocFile]     = useState(null)
+  const [staffDocUploading, setStaffDocUploading] = useState(false)
+  const [staffDocError, setStaffDocError]   = useState('')
 
   const navigate = useNavigate()
 
@@ -376,6 +386,7 @@ export default function Dashboard() {
     try {
       const res = await enrollStudent(enrollForm)
       setGeneratedPassword(res.data.generated_password)
+      setGeneratedStudentId(res.data.student_id || '')
       fetchStudents()
     } catch (err) {
       setEnrollError(err.response?.data?.username?.[0] || err.response?.data?.email?.[0] || 'Enrollment failed. Please check inputs.')
@@ -391,6 +402,7 @@ export default function Dashboard() {
   const handleCloseEnrollModal = () => {
     setEnrollModal(false)
     setGeneratedPassword('')
+    setGeneratedStudentId('')
     setEnrollForm({ full_name: '', username: '', email: '', phone: '', destination_country: 'Canada', notes: '' })
     setEnrollError('')
   }
@@ -452,6 +464,77 @@ export default function Dashboard() {
     }
   }
 
+  // Document verification handlers
+  const handleVerifyDocument = async (docId, status, reason = '') => {
+    try {
+      await verifyStudentDocument(docId, { verification_status: status, rejection_reason: reason })
+      if (selectedStudent) {
+        refreshStudentDetail(selectedStudent.id)
+      }
+      setRejectModalDoc(null)
+      setRejectReasonInput('')
+      setActionNotice(`Document verification status updated to '${status}'.`)
+      setTimeout(() => setActionNotice(''), 3000)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update document status.')
+    }
+  }
+
+  const handleDeleteDocument = async (docId) => {
+    if (!isAdmin) return
+    if (!window.confirm('Are you sure you want to delete this student document? This will delete the DB record and Cloudinary asset permanently.')) return
+    try {
+      await deleteStudentDocument(docId)
+      if (selectedStudent) {
+        refreshStudentDetail(selectedStudent.id)
+      }
+      setActionNotice('Document deleted successfully.')
+      setTimeout(() => setActionNotice(''), 3000)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete document.')
+    }
+  }
+
+  const handleStaffDocUpload = async (e) => {
+    e.preventDefault()
+    setStaffDocError('')
+    if (!staffDocFile || !selectedStudent) {
+      setStaffDocError('Please select a file to upload.')
+      return
+    }
+
+    const ext = staffDocFile.name.substring(staffDocFile.name.lastIndexOf('.')).toLowerCase()
+    if (!['.pdf', '.jpg', '.jpeg', '.png'].includes(ext)) {
+      setStaffDocError(`Invalid document format (${ext}). Supported: PDF, JPG, PNG.`)
+      return
+    }
+
+    if (staffDocFile.size > 15 * 1024 * 1024) {
+      setStaffDocError(`File size exceeds 15MB limit (${(staffDocFile.size / (1024*1024)).toFixed(1)}MB).`)
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', staffDocFile)
+    formData.append('document_type', staffDocType)
+    formData.append('student_id', selectedStudent.id)
+
+    setStaffDocUploading(true)
+    try {
+      await uploadStudentDocument(formData)
+      setStaffDocFile(null)
+      const fileInput = document.getElementById('staff-doc-file-input')
+      if (fileInput) fileInput.value = ''
+      setActionNotice('Document uploaded successfully on behalf of student!')
+      setTimeout(() => setActionNotice(''), 4000)
+      refreshStudentDetail(selectedStudent.id)
+    } catch (err) {
+      setStaffDocError(err.response?.data?.error || 'Failed to upload document.')
+    } finally {
+      setStaffDocUploading(false)
+    }
+  }
+
   // Delete student (ADMIN ONLY)
   const handleDeleteStudent = async (studentId) => {
     if (!isAdmin) return
@@ -481,6 +564,7 @@ export default function Dashboard() {
 
   const filteredStudents = students.filter(s =>
     s.full_name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+    s.student_id?.toLowerCase().includes(studentSearch.toLowerCase()) ||
     s.username?.toLowerCase().includes(studentSearch.toLowerCase()) ||
     s.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
     s.destination_country?.toLowerCase().includes(studentSearch.toLowerCase())
@@ -736,7 +820,14 @@ export default function Dashboard() {
                         className="hover:bg-slate-50 cursor-pointer transition-colors"
                       >
                         <td className="px-5 py-3.5">
-                          <p className="font-bold text-gray-900">{st.full_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-gray-900">{st.full_name}</p>
+                            {st.student_id && (
+                              <span className="text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                                {st.student_id}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-400">@{st.username} · {st.email}</p>
                         </td>
                         <td className="px-5 py-3.5 text-gray-600 font-mono text-xs">{st.phone}</td>
@@ -1048,6 +1139,17 @@ export default function Dashboard() {
                   Below is the generated password for <span className="font-bold text-gray-900">{enrollForm.full_name}</span> (@{enrollForm.username}).
                 </p>
 
+                {generatedStudentId && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 text-center space-y-0.5 shadow-sm">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
+                      🎓 Assigned Student ID
+                    </p>
+                    <p className="font-mono font-black text-xl text-emerald-950">
+                      {generatedStudentId}
+                    </p>
+                  </div>
+                )}
+
                 <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 space-y-2">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
                     🔒 One-Time Generated Password
@@ -1094,8 +1196,8 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-slate-900 text-white px-6 py-6 border-b border-slate-800">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs bg-amber-400 text-slate-950 font-bold px-2.5 py-0.5 rounded-full uppercase">
-                  Student Record #{selectedStudent.id}
+                <span className="text-xs bg-amber-400 text-slate-950 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-mono">
+                  Student ID: {selectedStudent.student_id || `#${selectedStudent.id}`}
                 </span>
                 <button onClick={() => setSelectedStudent(null)} className="text-white/70 hover:text-white text-lg font-bold">✕</button>
               </div>
@@ -1213,6 +1315,173 @@ export default function Dashboard() {
                 ))}
               </div>
 
+              {/* ── STUDENT DOCUMENTS SECTION ───────────────────────── */}
+              <div className="pt-6 border-t border-slate-200 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                      <span>📄 Student Documents Compliance</span>
+                      <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
+                        {selectedStudent.documents?.length || 0} Documents
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500">Review uploaded documents, verify/reject status, or upload on student behalf</p>
+                  </div>
+                </div>
+
+                {/* Upload On-Behalf-Of Form */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    ➕ Upload Document on Behalf of Student
+                  </p>
+
+                  {staffDocError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-xl">
+                      ⚠️ {staffDocError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleStaffDocUpload} className="grid sm:grid-cols-12 gap-3 items-end">
+                    <div className="sm:col-span-4">
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Document Type *</label>
+                      <select
+                        value={staffDocType}
+                        onChange={e => setStaffDocType(e.target.value)}
+                        className="input-field text-xs py-2 px-3"
+                      >
+                        <option value="Passport">Passport</option>
+                        <option value="10th Marksheet">10th Marksheet</option>
+                        <option value="12th Marksheet">12th Marksheet</option>
+                        <option value="IELTS/English Score">IELTS/English Score</option>
+                        <option value="Bank Statement">Bank Statement</option>
+                        <option value="Photo">Passport Photo</option>
+                        <option value="Other">Other Document</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-5">
+                      <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Select File (PDF, JPG, PNG) *</label>
+                      <input
+                        id="staff-doc-file-input"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        required
+                        onChange={e => setStaffDocFile(e.target.files?.[0] || null)}
+                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white hover:file:bg-slate-800 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <button
+                        type="submit"
+                        disabled={staffDocUploading}
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        {staffDocUploading ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>📤 Upload Doc</>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Uploaded Documents List */}
+                <div className="space-y-3">
+                  {!selectedStudent.documents || selectedStudent.documents.length === 0 ? (
+                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400">
+                      📄 No documents uploaded for this student yet. Use the form above to upload a scan or ask the student to upload via their portal.
+                    </div>
+                  ) : (
+                    selectedStudent.documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-slate-300 transition-all"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-slate-900 text-sm">{doc.document_type}</span>
+                            {/* Verification Status Badge */}
+                            {doc.verification_status === 'pending' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                ⏳ Pending Review
+                              </span>
+                            ) : doc.verification_status === 'verified' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ✅ Verified ({doc.verified_by_name})
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
+                                ❌ Rejected
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-slate-500">
+                            <span className="font-mono text-[11px]">📎 {doc.file_name || 'Document'}</span>
+                            <span>· Uploaded by: <strong className="text-slate-700">{doc.uploaded_by_name}</strong></span>
+                            <span>· {new Date(doc.uploaded_at).toLocaleDateString()}</span>
+                          </div>
+
+                          {doc.verification_status === 'rejected' && doc.rejection_reason && (
+                            <p className="text-xs text-red-700 bg-red-50 p-2 rounded-xl border border-red-200 mt-1">
+                              ⚠️ <strong>Rejection Reason:</strong> {doc.rejection_reason}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 sm:self-center">
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-xl border border-slate-200 transition-all"
+                          >
+                            👁️ View
+                          </a>
+
+                          {/* Verify Button */}
+                          {doc.verification_status !== 'verified' && (
+                            <button
+                              onClick={() => handleVerifyDocument(doc.id, 'verified')}
+                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                            >
+                              ✅ Verify
+                            </button>
+                          )}
+
+                          {/* Reject Button */}
+                          {doc.verification_status !== 'rejected' && (
+                            <button
+                              onClick={() => setRejectModalDoc(doc)}
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-xl border border-amber-200 transition-all"
+                            >
+                              ❌ Reject
+                            </button>
+                          )}
+
+                          {/* DELETE BUTTON (ADMIN ONLY - strictly hidden for staff) */}
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1.5 rounded-xl border border-red-200 transition-all"
+                              title="Delete Document (Admin Only)"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1327,6 +1596,62 @@ export default function Dashboard() {
                   className="w-1/2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
                 >
                   Record Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      {/* ── REJECT DOCUMENT REASON MODAL ─────────────────────────────── */}
+      {rejectModalDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4">
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <span>❌ Reject Document</span>
+                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
+                  {rejectModalDoc.document_type}
+                </span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Specify feedback / reason for rejecting this document. This note will be displayed directly to the student in their portal.
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleVerifyDocument(rejectModalDoc.id, 'rejected', rejectReasonInput)
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-gray-500 uppercase mb-1">Rejection Reason / Counselor Feedback *</label>
+                <textarea
+                  rows={3}
+                  required
+                  className="input-field text-xs resize-none"
+                  placeholder="e.g. Scan is blurry, please re-upload clear page"
+                  value={rejectReasonInput}
+                  onChange={e => setRejectReasonInput(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejectModalDoc(null)
+                    setRejectReasonInput('')
+                  }}
+                  className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl"
+                >
+                  Confirm Rejection
                 </button>
               </div>
             </form>

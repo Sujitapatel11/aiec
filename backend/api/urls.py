@@ -33,5 +33,10 @@ urlpatterns = [
     path('testimonials/video/', views.manage_video_testimonials),
     path('testimonials/video/upload/', views.upload_video_testimonial),
     path('testimonials/video/<int:pk>/', views.manage_video_testimonial_detail),
+    # Student Documents API
+    path('documents/upload/', views.upload_student_document),
+    path('documents/', views.list_student_documents),
+    path('documents/<int:pk>/status/', views.verify_student_document),
+    path('documents/<int:pk>/', views.delete_student_document),
 ]
 

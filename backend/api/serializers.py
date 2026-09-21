@@ -1,8 +1,34 @@
 from rest_framework import serializers
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, VideoTestimonial
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument
 )
+
+
+class StudentDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+    verified_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentDocument
+        fields = [
+            'id', 'student', 'document_type', 'file_url', 'public_id', 'file_name',
+            'uploaded_by', 'uploaded_by_name', 'uploaded_at',
+            'verification_status', 'verified_by', 'verified_by_name', 'verified_at',
+            'rejection_reason'
+        ]
+        read_only_fields = ['uploaded_at', 'uploaded_by', 'verified_by', 'verified_at']
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return 'System'
+
+    def get_verified_by_name(self, obj):
+        if obj.verified_by:
+            return obj.verified_by.get_full_name() or obj.verified_by.username
+        return None
+
 
 
 class LeadSerializer(serializers.ModelSerializer):
@@ -148,6 +174,7 @@ class ProcessStepSerializer(serializers.ModelSerializer):
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     process_steps = ProcessStepSerializer(many=True, read_only=True)
+    documents = StudentDocumentSerializer(many=True, read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     enrolled_by_name = serializers.SerializerMethodField()
@@ -158,9 +185,9 @@ class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
         fields = [
-            'id', 'user', 'username', 'email', 'full_name', 'phone', 'destination_country',
+            'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone', 'destination_country',
             'enrollment_date', 'enrolled_by', 'enrolled_by_name', 'notes',
-            'process_steps', 'total_estimated_cost', 'total_paid', 'pending_balance'
+            'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance'
         ]
 
     def get_enrolled_by_name(self, obj):
