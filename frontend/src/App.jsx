@@ -15,6 +15,7 @@ const Login          = lazy(() => import('./pages/Login'))
 const StaffManagement = lazy(() => import('./pages/StaffManagement'))
 const StudentPortal  = lazy(() => import('./pages/StudentPortal'))
 const CountryDetail  = lazy(() => import('./pages/CountryDetail'))
+const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 
 // Loading spinner
 function PageLoader() {
@@ -52,8 +53,9 @@ export default function App() {
               <Route path="/results/:id"         element={<Results />} />
               <Route path="/login"               element={<Login />} />
               <Route path="/country/:id"         element={<CountryDetail />} />
+              <Route path="/reset-password/:uidb64/:token" element={<ResetPassword />} />
               <Route path="/dashboard"           element={<PrivateRoute allowedRoles={['admin', 'staff']}><Dashboard /></PrivateRoute>} />
-              <Route path="/staff"               element={<PrivateRoute allowedRoles={['admin', 'staff']}><StaffManagement /></PrivateRoute>} />
+              <Route path="/staff"               element={<PrivateRoute allowedRoles={['admin']}><StaffManagement /></PrivateRoute>} />
               <Route path="/student-portal"      element={<PrivateRoute allowedRoles={['student']}><StudentPortal /></PrivateRoute>} />
             </Routes>
           </Suspense>

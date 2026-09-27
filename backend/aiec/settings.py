@@ -129,11 +129,23 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 WHATSAPP_NUMBER = os.getenv('WHATSAPP_NUMBER', '+919999999999')
 
 # Email
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# Set EMAIL_BACKEND=console in .env for local development (prints to stdout, no real send)
+# Leave unset or set to smtp for production
+_email_backend_env = os.getenv('EMAIL_BACKEND_OVERRIDE', '').strip()
+if _email_backend_env == 'console':
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 NOTIFY_EMAIL = os.getenv('NOTIFY_EMAIL', EMAIL_HOST_USER)
+
+# Password reset — token valid for 1 hour (3600 seconds)
+PASSWORD_RESET_TIMEOUT = int(os.getenv('PASSWORD_RESET_TIMEOUT_SECONDS', '3600'))
+
+# Frontend URL for building reset links in emails
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')

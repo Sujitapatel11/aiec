@@ -29,13 +29,18 @@ api.interceptors.response.use(
 )
 
 // Auth
-export const adminLogin  = (data) => api.post('/auth/login/', data)
-export const adminLogout = ()     => api.post('/auth/logout/')
+export const adminLogin           = (data) => api.post('/auth/login/', data)
+export const adminLogout          = ()     => api.post('/auth/logout/')
+export const requestPasswordReset  = (data) => api.post('/auth/password-reset/', data)
+export const confirmPasswordReset  = (data) => api.post('/auth/password-reset-confirm/', data)
 export const getUsers    = ()     => api.get('/auth/users/')
 export const createUser  = (data) => api.post('/auth/users/', data)
 export const createStaff = (data) => api.post('/staff/create/', data)
 export const updateUser  = (id, data) => api.patch(`/auth/users/${id}/`, data)
 export const deleteUser  = (id)   => api.delete(`/auth/users/${id}/`)
+// Admin/Staff-initiated password reset (direct set, no email)
+export const resetStudentPassword = (studentId, data) => api.post(`/auth/students/${studentId}/reset-password/`, data)
+export const resetStaffPassword   = (userId,    data) => api.post(`/auth/staff/${userId}/reset-password/`,    data)
 
 // Public
 export const submitQuestionnaire = (data) => api.post('/questionnaire/', data)
@@ -46,7 +51,10 @@ export const getCountries         = ()     => api.get('/countries/?popular=true'
 export const chatCounsellor       = (messages) => api.post('/chat/', { messages })
 
 // Protected (dashboard)
-export const getLeads          = (page = 1) => api.get(`/leads/?page=${page}`)
+export const getLeads          = (page = 1, filters = {}) => api.get('/leads/', {
+  params: { page, ...filters },
+})
+export const createLead        = (data)     => api.post('/leads/', data)
 export const getLead           = (id)       => api.get(`/leads/${id}/`)
 export const updateLead        = (id, data) => api.patch(`/leads/${id}/`, data)
 export const getDashboardStats = ()         => api.get('/dashboard/stats/')

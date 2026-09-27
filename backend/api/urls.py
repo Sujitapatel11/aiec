@@ -18,6 +18,11 @@ urlpatterns = [
     path('auth/logout/', views.admin_logout),
     path('auth/users/', views.manage_users),
     path('auth/users/<int:user_id>/', views.manage_user_detail),
+    path('auth/password-reset/', views.request_password_reset),
+    path('auth/password-reset-confirm/', views.confirm_password_reset),
+    # Admin/Staff-initiated password reset (no email — direct set)
+    path('auth/students/<int:student_id>/reset-password/', views.reset_student_password),
+    path('auth/staff/<int:user_id>/reset-password/', views.reset_staff_password),
     path('staff/create/', views.create_staff),
     path('chat/', views.chat_counsellor),
     # Student Enrollment & Process Tracking

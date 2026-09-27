@@ -85,6 +85,7 @@ export default function Login() {
       localStorage.setItem('aiec_token', res.data.token)
       localStorage.setItem('aiec_user', res.data.name || res.data.username)
       localStorage.setItem('aiec_role', userRole)
+      if (res.data.user_id) localStorage.setItem('aiec_user_id', res.data.user_id)
       localStorage.setItem('aiec_last_active', Date.now().toString())
 
       if (rememberMe) {
@@ -308,24 +309,21 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password Modal (Static Notice) */}
       {forgotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border border-gray-100 text-center space-y-3">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border border-gray-100 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center text-xl mx-auto border border-slate-200">
               🔑
             </div>
-            <h3 className="font-bold text-gray-900 text-base">Password Recovery</h3>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Password resets for AIEC Admin, Staff, and Student accounts are managed by system administrators.
-            </p>
-            <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-200">
-              Contact AIEC IT Support or email <span className="font-semibold text-gray-800">sujitapatel787@gmail.com</span> to reset credentials.
+            <h3 className="font-bold text-gray-900 text-base">Password Reset</h3>
+            <p className="text-xs text-gray-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              Contact your consultancy admin/staff to reset your password.
             </p>
             <button
               type="button"
               onClick={() => setForgotModal(false)}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all mt-1"
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all"
             >
               Close
             </button>

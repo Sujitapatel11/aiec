@@ -55,6 +55,12 @@ def validate_password_strength(password):
 
 # ── Admin-only viewsets ────────────────────────────────────────────────────
 
+CRM_LEAD_SOURCES = {'ai_assessment', 'whatsapp_inquiry', 'chatbot', 'crm_manual'}
+
+
+def normalize_lead_phone(phone):
+    return re.sub(r'\D', '', str(phone or ''))
+
 class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     permission_classes = [IsAuthenticated]
@@ -79,6 +85,50 @@ class LeadViewSet(viewsets.ModelViewSet):
         if search:
             qs = qs.filter(name__icontains=search) | qs.filter(email__icontains=search) | qs.filter(phone__icontains=search)
         return qs.order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        if not (
+            request.user.is_superuser
+            or request.user.is_staff
+            or request.user.groups.filter(name='Staff').exists()
+        ):
+            return Response(
+                {'error': 'Admin or Staff permissions required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        data = request.data.copy()
+        source = str(data.get('source') or 'crm_manual').strip().lower()
+        if source not in CRM_LEAD_SOURCES:
+            return Response(
+                {'source': [f'Source must be one of: {", ".join(sorted(CRM_LEAD_SOURCES))}.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        data['source'] = source
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email'].strip().lower()
+        phone = normalize_lead_phone(serializer.validated_data['phone'])
+
+        if Lead.objects.filter(email__iexact=email).exists():
+            return Response(
+                {'error': 'Lead with this email/phone already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if phone and any(
+            normalize_lead_phone(existing_phone) == phone
+            for existing_phone in Lead.objects.values_list('phone', flat=True)
+        ):
+            return Response(
+                {'error': 'Lead with this email/phone already exists.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer.save(email=email, phone=phone)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def destroy(self, request, *args, **kwargs):
         if not (request.user.is_superuser or request.user.has_perm('api.can_delete_lead')):
@@ -148,6 +198,7 @@ def admin_login(request):
     token, _ = Token.objects.get_or_create(user=user)
     return Response({
         'token': token.key,
+        'user_id': user.id,
         'username': user.username,
         'name': user.get_full_name() or user.username,
         'is_superuser': user.is_superuser,
@@ -453,7 +504,16 @@ def manage_user_detail(request, user_id):
         })
 
     if request.method == 'PATCH':
-        # Update fields
+        # Update fields — password changes are intentionally NOT handled here.
+        # Use POST /api/auth/staff/<id>/reset-password/ instead (Admin-only,
+        # full strength validation, token invalidation). This keeps a single
+        # auditable path for all password changes.
+        if 'password' in request.data:
+            return Response(
+                {'error': 'Password changes are not allowed via this endpoint. '
+                          'Use POST /api/auth/staff/<id>/reset-password/ instead.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if 'is_active' in request.data:
             user.is_active = request.data['is_active']
         if 'role' in request.data:
@@ -461,10 +521,6 @@ def manage_user_detail(request, user_id):
             if request.data['role'] == 'staff':
                 staff_group, _ = Group.objects.get_or_create(name='Staff')
                 user.groups.add(staff_group)
-        if 'password' in request.data and request.data['password']:
-            if len(request.data['password']) < 6:
-                return Response({'error': 'Password must be at least 6 characters.'}, status=400)
-            user.set_password(request.data['password'])
         if 'email' in request.data:
             user.email = request.data['email']
         if 'first_name' in request.data:
@@ -1061,3 +1117,329 @@ def delete_student_document(request, pk):
     return Response({'message': 'Student document deleted successfully.'})
 
 
+
+# ── Password Reset ─────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def request_password_reset(request):
+    """
+    Step 1 of password reset.
+    Accepts { "email": "..." } and sends a reset link if the account exists.
+
+    Anti-enumeration: always returns the same success message regardless of
+    whether the email is registered, so attackers cannot probe for valid accounts.
+
+    Works for all roles: Admin, Staff, Student.
+    The link is sent to the email address on the User record — NOT to any
+    separate profile or lead email.
+    """
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+    from django.core.mail import send_mail
+    from django.conf import settings as django_settings
+    from django.template.loader import render_to_string
+
+    GENERIC_RESPONSE = {
+        'message': 'If an account with this email exists, a password reset link has been sent.'
+    }
+
+    email = request.data.get('email', '').strip().lower()
+    if not email:
+        return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Basic format check — not a security gate, just UX
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        return Response({'error': 'Enter a valid email address.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Look up user — case-insensitive. If not found, still return generic response.
+    try:
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist:
+        # Anti-enumeration: return same response, do not reveal email not found
+        return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+    except User.MultipleObjectsReturned:
+        # Edge case: multiple accounts with same email — use the most recently joined
+        user = User.objects.filter(email__iexact=email).order_by('-date_joined').first()
+
+    if not user.is_active:
+        # Do not reveal that account is deactivated
+        return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+
+    # Generate secure, short-lived, single-use token
+    # django's PasswordResetTokenGenerator uses HMAC-SHA256 over:
+    # user.pk, user.password (hash), user.last_login, current timestamp
+    # Token is invalidated automatically when password changes (single-use enforced)
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+
+    frontend_url = getattr(django_settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+    reset_url = f"{frontend_url}/reset-password/{uidb64}/{token}/"
+
+    # Determine user's display name and role label for the email
+    display_name = user.get_full_name() or user.username
+    if user.is_superuser:
+        role_label = 'Admin'
+    elif user.is_staff or user.groups.filter(name='Staff').exists():
+        role_label = 'Staff'
+    else:
+        role_label = 'Student'
+
+    timeout_hours = getattr(django_settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600
+    from_email = getattr(django_settings, 'DEFAULT_FROM_EMAIL', '') or getattr(django_settings, 'EMAIL_HOST_USER', '')
+
+    subject = 'AIEC Portal — Password Reset Request'
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;padding:24px;border-radius:12px;">
+      <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:20px 24px;border-radius:8px;margin-bottom:20px;">
+        <h2 style="color:white;margin:0;font-size:20px;">🔑 Password Reset Request</h2>
+        <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">Aaradhya International Education Consultancy</p>
+      </div>
+
+      <div style="background:white;border-radius:8px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <p style="color:#374151;font-size:15px;">Hi <strong>{display_name}</strong> ({role_label}),</p>
+        <p style="color:#374151;font-size:14px;line-height:1.6;">
+          We received a request to reset the password for your AIEC Portal account
+          (<strong>{user.email}</strong>).
+        </p>
+        <p style="color:#374151;font-size:14px;line-height:1.6;">
+          Click the button below to set a new password. This link will expire in
+          <strong>{timeout_hours} hour{'s' if timeout_hours != 1 else ''}</strong>.
+        </p>
+
+        <div style="text-align:center;margin:28px 0;">
+          <a href="{reset_url}"
+             style="background:#0f172a;color:white;padding:14px 32px;border-radius:8px;
+                    text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">
+            Reset My Password
+          </a>
+        </div>
+
+        <p style="color:#6b7280;font-size:13px;line-height:1.6;">
+          If you did not request this, you can safely ignore this email.
+          Your password will <strong>not</strong> change unless you click the link above.
+        </p>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" />
+        <p style="color:#9ca3af;font-size:12px;">
+          For security: this link expires in {timeout_hours} hour{'s' if timeout_hours != 1 else ''},
+          can only be used once, and is tied to your current password.
+          If you need help, contact AIEC support.
+        </p>
+      </div>
+
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:16px;">
+        AIEC — Aaradhya International Education Consultancy, Birgunj, Nepal
+      </p>
+    </div>
+    """
+
+    plain_body = (
+        f"Hi {display_name},\n\n"
+        f"Reset your AIEC Portal password by visiting:\n{reset_url}\n\n"
+        f"This link expires in {timeout_hours} hour{'s' if timeout_hours != 1 else ''} and can only be used once.\n\n"
+        f"If you didn't request this, ignore this email.\n\n"
+        f"— AIEC Support"
+    )
+
+    # Send in background thread so slow SMTP doesn't block the API response
+    def _send():
+        try:
+            send_mail(
+                subject=subject,
+                message=plain_body,
+                from_email=from_email,
+                recipient_list=[user.email],
+                html_message=html_body,
+                fail_silently=True,  # never crash the API response due to email failure
+            )
+        except Exception as exc:
+            # Log to stdout only — never raise, never expose in response
+            print(f"[PASSWORD RESET EMAIL ERROR] user_id={user.pk} error={exc}", flush=True)
+
+    threading.Thread(target=_send, daemon=True).start()
+
+    return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def confirm_password_reset(request):
+    """
+    Step 2 of password reset.
+    Accepts { "uidb64": "...", "token": "...", "new_password": "...", "confirm_password": "..." }
+
+    Security guarantees:
+    - Token is validated with Django's PasswordResetTokenGenerator (HMAC-SHA256)
+    - Token is single-use: once password changes, the hash changes and token is invalid
+    - Token is short-lived: controlled by PASSWORD_RESET_TIMEOUT in settings
+    - New password is validated with the same rules used at account creation
+    - Existing DRF auth tokens are invalidated after password change (forces re-login)
+    - Never exposes whether the uidb64 maps to a real user (generic error)
+    """
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_decode
+    from django.utils.encoding import force_str
+
+    uidb64 = request.data.get('uidb64', '').strip()
+    token = request.data.get('token', '').strip()
+    new_password = request.data.get('new_password', '').strip()
+    confirm_password = request.data.get('confirm_password', '').strip()
+
+    # 1. Required fields
+    if not all([uidb64, token, new_password, confirm_password]):
+        return Response(
+            {'error': 'All fields are required: uidb64, token, new_password, confirm_password.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 2. Password match
+    if new_password != confirm_password:
+        return Response(
+            {'error': 'Passwords do not match.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 3. Password strength — same rules as account creation
+    pwd_error = validate_password_strength(new_password)
+    if pwd_error:
+        return Response({'error': pwd_error}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 4. Decode uidb64 → user pk
+    INVALID_TOKEN_RESPONSE = Response(
+        {'error': 'This password reset link is invalid or has expired. Please request a new one.'},
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return INVALID_TOKEN_RESPONSE
+
+    if not user.is_active:
+        return INVALID_TOKEN_RESPONSE
+
+    # 5. Validate token — checks HMAC, timestamp, and that password hasn't already changed
+    if not default_token_generator.check_token(user, token):
+        return INVALID_TOKEN_RESPONSE
+
+    # 6. Set new password (Django PBKDF2-hashes it)
+    user.set_password(new_password)
+    user.save()
+
+    # 7. Invalidate all existing DRF auth tokens for this user
+    #    This forces re-login with the new password — prevents session fixation
+    Token.objects.filter(user=user).delete()
+
+    return Response(
+        {'message': 'Password reset successful. You can now log in with your new password.'},
+        status=status.HTTP_200_OK
+    )
+
+
+# ── Admin/Staff-initiated Password Reset ──────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reset_student_password(request, student_id):
+    """
+    Admin or authorized Staff resets a student's password directly.
+    No email/SMTP — caller sets the password and communicates it to the student.
+
+    Permission rules:
+      - Admin (is_superuser): can reset any student's password.
+      - Staff: can reset ONLY students they personally enrolled
+               (StudentProfile.enrolled_by == request.user).
+      - Everyone else: 403.
+
+    Password policy: same full validate_password_strength() used at enrollment
+    (min 8 chars, letter+digit mix, weak-pattern blacklist). Never returned in
+    response. Stored as PBKDF2 hash via set_password().
+    Existing DRF auth token for that student is invalidated on success.
+    """
+    is_staff_or_admin = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    )
+    if not is_staff_or_admin:
+        return Response(
+            {'error': 'Admin or Staff permissions required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        student = StudentProfile.objects.select_related('user', 'enrolled_by').get(pk=student_id)
+    except StudentProfile.DoesNotExist:
+        return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Staff can only reset passwords for students they enrolled
+    if not request.user.is_superuser:
+        if student.enrolled_by_id != request.user.id:
+            return Response(
+                {'error': 'You can only reset passwords for students you personally enrolled.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    new_password = request.data.get('new_password', '').strip()
+    if not new_password:
+        return Response({'error': 'new_password is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pwd_error = validate_password_strength(new_password)
+    if pwd_error:
+        return Response({'error': pwd_error}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Set password — Django hashes with PBKDF2, never stored/returned in plaintext
+    student.user.set_password(new_password)
+    student.user.save()
+
+    # Invalidate existing DRF token → student must re-login with new password
+    Token.objects.filter(user=student.user).delete()
+
+    return Response(
+        {'message': f"Password for student '{student.full_name}' has been reset successfully."},
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reset_staff_password(request, user_id):
+    """
+    Admin-only endpoint to reset any staff member's password.
+    Staff cannot use this endpoint — 403 for non-superusers.
+
+    Same full password policy as account creation.
+    Existing DRF auth token invalidated on success.
+    """
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Admin access required. Staff cannot reset other staff passwords.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        target = User.objects.get(id=user_id, is_staff=True)
+    except User.DoesNotExist:
+        return Response({'error': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    new_password = request.data.get('new_password', '').strip()
+    if not new_password:
+        return Response({'error': 'new_password is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pwd_error = validate_password_strength(new_password)
+    if pwd_error:
+        return Response({'error': pwd_error}, status=status.HTTP_400_BAD_REQUEST)
+
+    target.set_password(new_password)
+    target.save()
+
+    # Invalidate token → forces re-login
+    Token.objects.filter(user=target).delete()
+
+    return Response(
+        {'message': f"Password for '{target.username}' has been reset successfully."},
+        status=status.HTTP_200_OK
+    )

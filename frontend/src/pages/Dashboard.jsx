@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getLeads, getDashboardStats, updateLead, adminLogout,
+  getLeads, createLead, getDashboardStats, updateLead, adminLogout,
   getStudents, getStudentDetail, enrollStudent, deleteStudent,
   addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment,
   getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial,
-  uploadStudentDocument, verifyStudentDocument, deleteStudentDocument
+  uploadStudentDocument, verifyStudentDocument, deleteStudentDocument,
+  resetStudentPassword
 } from '../api'
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -17,6 +18,20 @@ const STATUS_OPTIONS = [
   { value: 'converted',    label: 'Converted',    color: 'bg-green-100 text-green-700 border-green-200' },
   { value: 'lost',         label: 'Lost',         color: 'bg-red-100 text-red-700 border-red-200' },
 ]
+
+const LEAD_SOURCE_OPTIONS = [
+  { value: 'crm_manual', label: 'CRM Manual' },
+  { value: 'ai_assessment', label: 'AI Assessment' },
+  { value: 'whatsapp_inquiry', label: 'WhatsApp Inquiry' },
+  { value: 'chatbot', label: 'Chatbot' },
+]
+
+const EMPTY_LEAD_FORM = {
+  name: '', email: '', phone: '', country_of_residence: '', qualification: '',
+  marks: '', english_score: '', budget: '', course_interest: '',
+  recommended_country: '', recommended_course: '', status: 'new',
+  source: 'crm_manual', notes: '',
+}
 
 const STEP_STATUS_OPTIONS = [
   { value: 'pending',     label: 'Pending',     color: 'bg-slate-100 text-slate-700 border-slate-200' },
@@ -184,8 +199,14 @@ export default function Dashboard() {
   const [totalPages, setTotalPages]       = useState(1)
   const [totalCount, setTotalCount]       = useState(0)
   const [statusFilter, setStatusFilter]   = useState('')
+  const [countryFilter, setCountryFilter] = useState('')
+  const [courseFilter, setCourseFilter]   = useState('')
   const [search, setSearch]               = useState('')
   const [selectedLead, setSelectedLead]   = useState(null)
+  const [leadModal, setLeadModal]         = useState(false)
+  const [leadForm, setLeadForm]           = useState(EMPTY_LEAD_FORM)
+  const [leadFormError, setLeadFormError] = useState('')
+  const [leadSaving, setLeadSaving]       = useState(false)
 
   // Students tab state
   const [students, setStudents]           = useState([])
@@ -216,11 +237,45 @@ export default function Dashboard() {
   const [staffDocUploading, setStaffDocUploading] = useState(false)
   const [staffDocError, setStaffDocError]   = useState('')
 
+  // Reset student password state
+  const [resetStudentModal, setResetStudentModal] = useState(null)
+  const [resetStudentPasswordInput, setResetStudentPasswordInput] = useState('')
+  const [resetStudentError, setResetStudentError] = useState('')
+  const [resetStudentLoading, setResetStudentLoading] = useState(false)
+
   const navigate = useNavigate()
 
   const userName = localStorage.getItem('aiec_user') || 'Admin'
   const userRole = localStorage.getItem('aiec_role') || 'staff'
   const isAdmin  = userRole === 'admin'
+  const currentUserId = Number(localStorage.getItem('aiec_user_id') || 0)
+  const currentUserName = localStorage.getItem('aiec_user') || ''
+
+  const canResetStudentPassword = (st) => {
+    if (!st) return false
+    if (isAdmin) return true
+    if (st.enrolled_by && Number(st.enrolled_by) === currentUserId) return true
+    if (st.enrolled_by_name && st.enrolled_by_name === currentUserName) return true
+    return false
+  }
+
+  const handleResetStudentSubmit = async (e) => {
+    e.preventDefault()
+    if (!resetStudentModal) return
+    setResetStudentError('')
+    setResetStudentLoading(true)
+    try {
+      const res = await resetStudentPassword(resetStudentModal.id, { new_password: resetStudentPasswordInput })
+      setActionNotice(res.data?.message || `Password for student '${resetStudentModal.full_name}' has been reset successfully.`)
+      setTimeout(() => setActionNotice(''), 4000)
+      setResetStudentModal(null)
+      setResetStudentPasswordInput('')
+    } catch (err) {
+      setResetStudentError(err.response?.data?.error || 'Failed to reset student password.')
+    } finally {
+      setResetStudentLoading(false)
+    }
+  }
 
   const fetchStats = useCallback(async () => {
     try {
@@ -235,11 +290,12 @@ export default function Dashboard() {
     setLoading(true)
     setError('')
     try {
-      let url = `/leads/?page=${page}`
-      if (statusFilter) url += `&status=${statusFilter}`
-      if (search)       url += `&search=${encodeURIComponent(search)}`
-
-      const res = await getLeads(page) // backend handles basic search/filter if updated
+      const res = await getLeads(page, {
+        status: statusFilter || undefined,
+        search: search || undefined,
+        country: countryFilter || undefined,
+        course: courseFilter || undefined,
+      })
       const data = res.data
       setLeads(data.results || data)
       setTotalCount(data.count || (data.results || data).length)
@@ -249,7 +305,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, search])
+  }, [page, statusFilter, search, countryFilter, courseFilter])
 
   const fetchStudents = useCallback(async () => {
     setStudentLoading(true)
@@ -368,6 +424,40 @@ export default function Dashboard() {
       fetchStats()
     } catch {
       alert('Failed to update status.')
+    }
+  }
+
+  const handleLeadSubmit = async (e) => {
+    e.preventDefault()
+    setLeadFormError('')
+    setLeadSaving(true)
+    try {
+      await createLead({
+        ...leadForm,
+        marks: leadForm.marks === '' ? null : leadForm.marks,
+        english_score: leadForm.english_score === '' ? null : leadForm.english_score,
+        budget: leadForm.budget === '' ? null : leadForm.budget,
+      })
+      setLeadModal(false)
+      setLeadForm({ ...EMPTY_LEAD_FORM })
+      setActionNotice('Lead created successfully.')
+      setTimeout(() => setActionNotice(''), 3000)
+      fetchLeads()
+      fetchStats()
+    } catch (err) {
+      const details = err.response?.data?.details
+      const detailMessage = details && typeof details === 'object'
+        ? Object.values(details).flat()[0]
+        : null
+      const responseData = err.response?.data
+      const fieldMessage = responseData && typeof responseData === 'object'
+        ? Object.entries(responseData)
+            .filter(([key]) => key !== 'details' && key !== 'error')
+            .flatMap(([, value]) => Array.isArray(value) ? value : [value])[0]
+        : null
+      setLeadFormError(detailMessage || fieldMessage || responseData?.error || 'Unable to create lead.')
+    } finally {
+      setLeadSaving(false)
     }
   }
 
@@ -684,14 +774,48 @@ export default function Dashboard() {
                 {!loading && <p className="text-xs text-gray-400 mt-0.5">{totalCount} total leads · Click row for details</p>}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="text"
                   placeholder="Search leads..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="input-field text-xs py-1.5 px-3 w-48"
+                  onChange={e => { setSearch(e.target.value); setPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-44"
                 />
+                <select
+                  value={statusFilter}
+                  onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-36"
+                  aria-label="Filter leads by status"
+                >
+                  <option value="">All statuses</option>
+                  {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select
+                  value={countryFilter}
+                  onChange={e => { setCountryFilter(e.target.value); setPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-40"
+                  aria-label="Filter leads by country"
+                >
+                  <option value="">All countries</option>
+                  {(stats?.filter_options?.countries || []).map(country => <option key={country} value={country}>{country}</option>)}
+                </select>
+                <select
+                  value={courseFilter}
+                  onChange={e => { setCourseFilter(e.target.value); setPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-40"
+                  aria-label="Filter leads by course"
+                >
+                  <option value="">All courses</option>
+                  {(stats?.filter_options?.courses || []).map(course => <option key={course} value={course}>{course}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => { setLeadFormError(''); setLeadModal(true) }}
+                  className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
+                >
+                  + Add Lead
+                </button>
               </div>
             </div>
 
@@ -847,6 +971,15 @@ export default function Dashboard() {
                           >
                             Checklist & Payments
                           </button>
+                          {canResetStudentPassword(st) && (
+                            <button
+                              onClick={() => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(st) }}
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 transition-all"
+                              title="Reset Student Password"
+                            >
+                              🔑 Reset Password
+                            </button>
+                          )}
                           {/* DELETE ACTION IS VISIBLE ONLY FOR ADMIN */}
                           {isAdmin && (
                             <button
@@ -1196,9 +1329,20 @@ export default function Dashboard() {
             {/* Header */}
             <div className="bg-slate-900 text-white px-6 py-6 border-b border-slate-800">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs bg-amber-400 text-slate-950 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-mono">
-                  Student ID: {selectedStudent.student_id || `#${selectedStudent.id}`}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-amber-400 text-slate-950 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-mono">
+                    Student ID: {selectedStudent.student_id || `#${selectedStudent.id}`}
+                  </span>
+                  {canResetStudentPassword(selectedStudent) && (
+                    <button
+                      onClick={() => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(selectedStudent) }}
+                      className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-full transition-all flex items-center gap-1 shadow-sm"
+                      title="Reset Student Password"
+                    >
+                      🔑 Reset Password
+                    </button>
+                  )}
+                </div>
                 <button onClick={() => setSelectedStudent(null)} className="text-white/70 hover:text-white text-lg font-bold">✕</button>
               </div>
 
@@ -1487,6 +1631,110 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── ADD LEAD MODAL ─────────────────────────────────────────────── */}
+      {leadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-900 text-base">Add Lead</h3>
+              <button
+                type="button"
+                onClick={() => setLeadModal(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl"
+                aria-label="Close add lead form"
+              >
+                ×
+              </button>
+            </div>
+
+            {leadFormError && (
+              <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                {leadFormError}
+              </div>
+            )}
+
+            <form onSubmit={handleLeadSubmit} className="space-y-3 text-xs">
+              <div className="grid sm:grid-cols-2 gap-3">
+                {[
+                  ['name', 'Name *', 'text', true],
+                  ['email', 'Email *', 'email', true],
+                  ['phone', 'Phone *', 'text', true],
+                  ['country_of_residence', 'Country of residence', 'text', false],
+                  ['qualification', 'Qualification', 'text', false],
+                  ['marks', 'Marks', 'number', false],
+                  ['english_score', 'English score', 'number', false],
+                  ['budget', 'Budget', 'number', false],
+                  ['course_interest', 'Course interest', 'text', false],
+                  ['recommended_country', 'Recommended country', 'text', false],
+                  ['recommended_course', 'Recommended course', 'text', false],
+                ].map(([field, label, type, required]) => (
+                  <label key={field} className="block font-bold text-gray-500 uppercase">
+                    {label}
+                    <input
+                      type={type}
+                      required={required}
+                      min={field === 'marks' ? 0 : field === 'english_score' ? 0 : field === 'budget' ? 0 : undefined}
+                      max={field === 'marks' ? 100 : field === 'english_score' ? 9 : undefined}
+                      step={field === 'marks' || field === 'english_score' ? '0.1' : undefined}
+                      className="input-field text-xs mt-1 normal-case font-normal"
+                      value={leadForm[field]}
+                      onChange={e => setLeadForm({ ...leadForm, [field]: e.target.value })}
+                    />
+                  </label>
+                ))}
+                <label className="block font-bold text-gray-500 uppercase">
+                  Status
+                  <select
+                    className="input-field text-xs mt-1 normal-case font-normal"
+                    value={leadForm.status}
+                    onChange={e => setLeadForm({ ...leadForm, status: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="block font-bold text-gray-500 uppercase">
+                  Source
+                  <select
+                    className="input-field text-xs mt-1 normal-case font-normal"
+                    value={leadForm.source}
+                    onChange={e => setLeadForm({ ...leadForm, source: e.target.value })}
+                  >
+                    {LEAD_SOURCE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block font-bold text-gray-500 uppercase">
+                Notes
+                <textarea
+                  rows={3}
+                  className="input-field text-xs mt-1 normal-case font-normal resize-none"
+                  value={leadForm.notes}
+                  onChange={e => setLeadForm({ ...leadForm, notes: e.target.value })}
+                />
+              </label>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setLeadModal(false)}
+                  className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={leadSaving}
+                  className="w-1/2 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl disabled:opacity-60"
+                >
+                  {leadSaving ? 'Saving...' : 'Create Lead'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── ADD CUSTOM STEP MODAL ─────────────────────────────────────── */}
       {stepModal && selectedStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -1653,6 +1901,109 @@ export default function Dashboard() {
                   className="w-1/2 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl"
                 >
                   Confirm Rejection
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── RESET STUDENT PASSWORD MODAL ────────────────────────────── */}
+      {resetStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4">
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <span>🔑 Reset Student Password</span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Direct password reset for <strong className="text-slate-900">{resetStudentModal.full_name}</strong> (@{resetStudentModal.username}).
+              </p>
+            </div>
+
+            <form onSubmit={handleResetStudentSubmit} className="space-y-4 text-xs">
+              {resetStudentError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3.5 py-2.5 rounded-xl flex items-start gap-2">
+                  <span>⚠️</span>
+                  <span>{resetStudentError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-gray-500 uppercase mb-1">New Password *</label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  className="input-field text-xs"
+                  placeholder="Enter new strong password"
+                  value={resetStudentPasswordInput}
+                  onChange={e => { setResetStudentPasswordInput(e.target.value); setResetStudentError('') }}
+                />
+
+                {/* Password Strength Indicator */}
+                {resetStudentPasswordInput.length > 0 && (
+                  <div className="mt-2 space-y-1.5 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium">Strength:</span>
+                      <span className={`font-bold ${
+                        resetStudentPasswordInput.length >= 8 && /[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput) && !['1234', '12345', '123456', '12345678', '123456789', 'password', 'password123', 'admin123'].includes(resetStudentPasswordInput.toLowerCase())
+                          ? 'text-green-600'
+                          : resetStudentPasswordInput.length >= 6
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                      }`}>
+                        {resetStudentPasswordInput.length >= 8 && /[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput) && !['1234', '12345', '123456', '12345678', '123456789', 'password', 'password123', 'admin123'].includes(resetStudentPasswordInput.toLowerCase())
+                          ? 'Strong'
+                          : resetStudentPasswordInput.length >= 6
+                          ? 'Medium'
+                          : 'Weak'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          resetStudentPasswordInput.length >= 8 && /[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput) && !['1234', '12345', '123456', '12345678', '123456789', 'password', 'password123', 'admin123'].includes(resetStudentPasswordInput.toLowerCase())
+                            ? 'bg-green-500'
+                            : resetStudentPasswordInput.length >= 6
+                            ? 'bg-amber-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{
+                          width: resetStudentPasswordInput.length >= 8 && /[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput)
+                            ? '100%'
+                            : resetStudentPasswordInput.length >= 6
+                            ? '66%'
+                            : '33%'
+                        }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[11px] pt-1">
+                      <span className={`flex items-center gap-1 ${resetStudentPasswordInput.length >= 8 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                        {resetStudentPasswordInput.length >= 8 ? '✓' : '○'} 8+ characters
+                      </span>
+                      <span className={`flex items-center gap-1 ${/[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput) ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
+                        {/[A-Za-z]/.test(resetStudentPasswordInput) && /[0-9]/.test(resetStudentPasswordInput) ? '✓' : '○'} Letters & numbers
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setResetStudentModal(null); setResetStudentPasswordInput(''); setResetStudentError('') }}
+                  className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetStudentLoading}
+                  className="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl disabled:opacity-50"
+                >
+                  {resetStudentLoading ? 'Resetting...' : 'Reset Password'}
                 </button>
               </div>
             </form>

@@ -36,6 +36,21 @@ class LeadSerializer(serializers.ModelSerializer):
         model = Lead
         fields = '__all__'
 
+    def validate_marks(self, value):
+        if value is not None and not 0 <= value <= 100:
+            raise serializers.ValidationError('Marks must be between 0 and 100.')
+        return value
+
+    def validate_english_score(self, value):
+        if value is not None and not 0 <= value <= 9:
+            raise serializers.ValidationError('English score must be between 0 and 9.')
+        return value
+
+    def validate_budget(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('Budget cannot be negative.')
+        return value
+
 
 class QuestionnaireSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,7 +77,7 @@ class QuestionnaireCreateSerializer(serializers.ModelSerializer):
 
         lead, _ = Lead.objects.get_or_create(
             email=email,
-            defaults={'name': name, 'phone': phone, 'city': city}
+            defaults={'name': name, 'phone': phone, 'country_of_residence': city}
         )
         questionnaire = Questionnaire.objects.create(lead=lead, **validated_data)
         return questionnaire
