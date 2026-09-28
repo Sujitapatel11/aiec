@@ -58,8 +58,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'aiec.wsgi.application'
 
+import sys
+
 _db_url = os.getenv('DATABASE_URL', '')
-if _db_url:
+if 'test' in sys.argv:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+elif _db_url:
     import dj_database_url
     DATABASES = {
         'default': dj_database_url.config(

@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
-from django.db.models import Count
+from django.db.models import Count, Q
 import secrets
 import os
 import threading
@@ -83,7 +83,7 @@ class LeadViewSet(viewsets.ModelViewSet):
         if status:
             qs = qs.filter(status=status)
         if search:
-            qs = qs.filter(name__icontains=search) | qs.filter(email__icontains=search) | qs.filter(phone__icontains=search)
+            qs = qs.filter(Q(name__icontains=search) | Q(email__icontains=search) | Q(phone__icontains=search))
         return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
@@ -1189,18 +1189,18 @@ def request_password_reset(request):
     timeout_hours = getattr(django_settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600
     from_email = getattr(django_settings, 'DEFAULT_FROM_EMAIL', '') or getattr(django_settings, 'EMAIL_HOST_USER', '')
 
-    subject = 'AIEC Portal — Password Reset Request'
+    subject = 'UrmiNexus Portal — Password Reset Request (AIEC)'
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;padding:24px;border-radius:12px;">
       <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:20px 24px;border-radius:8px;margin-bottom:20px;">
         <h2 style="color:white;margin:0;font-size:20px;">🔑 Password Reset Request</h2>
-        <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">Aaradhya International Education Consultancy</p>
+        <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">UrmiNexus SaaS Platform — AIEC Consultancy Tenant</p>
       </div>
 
       <div style="background:white;border-radius:8px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <p style="color:#374151;font-size:15px;">Hi <strong>{display_name}</strong> ({role_label}),</p>
         <p style="color:#374151;font-size:14px;line-height:1.6;">
-          We received a request to reset the password for your AIEC Portal account
+          We received a request to reset the password for your UrmiNexus account
           (<strong>{user.email}</strong>).
         </p>
         <p style="color:#374151;font-size:14px;line-height:1.6;">
@@ -1225,22 +1225,22 @@ def request_password_reset(request):
         <p style="color:#9ca3af;font-size:12px;">
           For security: this link expires in {timeout_hours} hour{'s' if timeout_hours != 1 else ''},
           can only be used once, and is tied to your current password.
-          If you need help, contact AIEC support.
+          If you need help, contact AIEC support or UrmiNexus platform administrator.
         </p>
       </div>
 
       <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:16px;">
-        AIEC — Aaradhya International Education Consultancy, Birgunj, Nepal
+        AIEC Consultancy Tenant · Powered by UrmiNexus SaaS Platform
       </p>
     </div>
     """
 
     plain_body = (
         f"Hi {display_name},\n\n"
-        f"Reset your AIEC Portal password by visiting:\n{reset_url}\n\n"
+        f"Reset your UrmiNexus Portal password for AIEC by visiting:\n{reset_url}\n\n"
         f"This link expires in {timeout_hours} hour{'s' if timeout_hours != 1 else ''} and can only be used once.\n\n"
         f"If you didn't request this, ignore this email.\n\n"
-        f"— AIEC Support"
+        f"— UrmiNexus Platform Support (AIEC Tenant)"
     )
 
     # Send in background thread so slow SMTP doesn't block the API response

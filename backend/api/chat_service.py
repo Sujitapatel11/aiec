@@ -1,5 +1,5 @@
 """
-Chatbot service for AIEC study abroad counsellor.
+Chatbot service for UrmiNexus SaaS platform (AIEC tenant counsellor).
 Uses OpenAI if key is set, otherwise rule-based conversation flow.
 """
 import os

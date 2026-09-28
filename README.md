@@ -1,6 +1,13 @@
-# AIEC – Aradhya International Education Consultancy
+# UrmiNexus – AI-Powered Study Abroad SaaS Platform
 
-AI-powered study abroad consultancy platform.
+UrmiNexus is a multi-tenant AI-powered study abroad SaaS platform. The **AIEC (Aradhya International Education Consultancy)** is the initial tenant operating on this platform.
+
+### Naming Hierarchy
+- **UrmiNexus**: Multi-tenant SaaS platform & core product infrastructure
+- **AIEC**: Consultancy tenant (Aradhya International Education Consultancy, Birgunj, Nepal)
+- **UrmiNexus Super Admin**: Platform-level administration
+- **AIEC Admin**: Consultancy-level administration for AIEC
+- **AIEC Staff / Students**: Consultancy-level staff and student users
 
 ## Stack
 - Frontend: React + TailwindCSS

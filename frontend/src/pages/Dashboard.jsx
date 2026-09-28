@@ -670,8 +670,8 @@ export default function Dashboard() {
             <img src="/logo.png" alt="AIEC Logo" className="h-7 w-auto object-contain" />
           </div>
           <div>
-            <h1 className="font-extrabold text-sm sm:text-base leading-tight">AIEC Portal Dashboard</h1>
-            <p className="text-[11px] text-amber-400 font-semibold">Birgunj, Nepal · Official CRM</p>
+            <h1 className="font-extrabold text-sm sm:text-base leading-tight">UrmiNexus Dashboard</h1>
+            <p className="text-[11px] text-amber-400 font-semibold">AIEC Consultancy Tenant · Birgunj, Nepal</p>
           </div>
         </div>
 

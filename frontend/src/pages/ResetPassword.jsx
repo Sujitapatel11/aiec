@@ -234,7 +234,7 @@ export default function ResetPassword() {
               </div>
             </div>
             <p className="text-amber-300 text-[11px] font-bold uppercase tracking-wider mb-0.5">
-              AIEC Enterprise Portal
+              UrmiNexus Portal · AIEC Tenant
             </p>
             <h1 className="text-xl font-extrabold">Set New Password</h1>
             <p className="text-blue-200/80 text-xs mt-1">

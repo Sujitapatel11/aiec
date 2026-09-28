@@ -165,7 +165,7 @@ export default function Login() {
             </div>
 
             <p className="text-amber-300 text-[11px] font-bold uppercase tracking-wider mb-0.5">
-              AIEC Enterprise Portal
+              UrmiNexus Portal · AIEC Tenant
             </p>
             <h1 className="text-xl font-extrabold text-white">
               Account Login
@@ -302,7 +302,7 @@ export default function Login() {
 
             <div className="pt-2 text-center border-t border-gray-100">
               <p className="text-[11px] text-gray-400">
-                Official Management Portal · AIEC Birgunj, Nepal
+                UrmiNexus SaaS Platform · AIEC Consultancy Tenant
               </p>
             </div>
           </form>
