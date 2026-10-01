@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -11,11 +11,11 @@ import threading
 import re
 
 from .models import (
-    Lead, Questionnaire, Country, Course,
+    Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument, DEFAULT_CHECKLIST_TEMPLATE
 )
 from .serializers import (
-    LeadSerializer, LeadDetailSerializer,
+    LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
     QuestionnaireSerializer, QuestionnaireCreateSerializer,
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
@@ -65,6 +65,17 @@ class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     permission_classes = [IsAuthenticated]
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not (
+            request.user.is_superuser
+            or request.user.is_staff
+            or request.user.groups.filter(name='Staff').exists()
+        ):
+            self.permission_denied(
+                request, message='Admin or Staff permissions required.'
+            )
+
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return LeadDetailSerializer
@@ -74,29 +85,21 @@ class LeadViewSet(viewsets.ModelViewSet):
         qs = Lead.objects.all()
         country = self.request.query_params.get('country', '').strip()
         course  = self.request.query_params.get('course', '').strip()
-        status  = self.request.query_params.get('status', '').strip()
+        status_param  = self.request.query_params.get('status', '').strip()
         search  = self.request.query_params.get('search', '').strip()
+
         if country:
-            qs = qs.filter(recommended_country__icontains=country)
+            qs = qs.filter(Q(recommended_country__icontains=country) | Q(country_of_residence__icontains=country))
         if course:
-            qs = qs.filter(course_interest__icontains=course)
-        if status:
-            qs = qs.filter(status=status)
+            qs = qs.filter(Q(course_interest__icontains=course) | Q(recommended_course__icontains=course))
+        if status_param:
+            qs = qs.filter(status=status_param)
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(email__icontains=search) | Q(phone__icontains=search))
+
         return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        if not (
-            request.user.is_superuser
-            or request.user.is_staff
-            or request.user.groups.filter(name='Staff').exists()
-        ):
-            return Response(
-                {'error': 'Admin or Staff permissions required.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         data = request.data.copy()
         source = str(data.get('source') or 'crm_manual').strip().lower()
         if source not in CRM_LEAD_SOURCES:
@@ -126,9 +129,73 @@ class LeadViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer.save(email=email, phone=phone)
+        lead = serializer.save(email=email, phone=phone)
+        LeadActivity.objects.create(
+            lead=lead,
+            author=request.user,
+            activity_type='note',
+            content=f"Lead created manually via CRM by {request.user.get_full_name() or request.user.username}."
+        )
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        old_status = instance.status
+        old_assigned = instance.assigned_to
+        old_followup = instance.next_follow_up
+
+        if 'assigned_to' in request.data:
+            assigned_user_id = request.data['assigned_to']
+            if assigned_user_id is not None:
+                try:
+                    assignee = User.objects.get(pk=assigned_user_id)
+                except User.DoesNotExist:
+                    return Response({'error': 'Assigned staff user not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                if not request.user.is_superuser and assignee != request.user:
+                    return Response(
+                        {'error': 'Only Admins can assign or reassign leads to other staff members.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated_lead = serializer.save()
+
+        if 'status' in request.data and updated_lead.status != old_status:
+            LeadActivity.objects.create(
+                lead=updated_lead,
+                author=request.user,
+                activity_type='status_change',
+                content=f"Status changed from '{old_status}' to '{updated_lead.status}'"
+            )
+
+        if 'assigned_to' in request.data and updated_lead.assigned_to != old_assigned:
+            if updated_lead.assigned_to:
+                assignee_name = updated_lead.assigned_to.get_full_name() or updated_lead.assigned_to.username
+                msg = f"Assigned to staff member: {assignee_name}"
+            else:
+                msg = "Lead assignment removed."
+            LeadActivity.objects.create(
+                lead=updated_lead,
+                author=request.user,
+                activity_type='assignment',
+                content=msg
+            )
+
+        if 'next_follow_up' in request.data and updated_lead.next_follow_up != old_followup:
+            followup_str = updated_lead.next_follow_up.strftime('%Y-%m-%d %H:%M') if updated_lead.next_follow_up else 'Cleared'
+            LeadActivity.objects.create(
+                lead=updated_lead,
+                author=request.user,
+                activity_type='followup',
+                content=f"Next follow-up updated to: {followup_str}"
+            )
+
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         if not (request.user.is_superuser or request.user.has_perm('api.can_delete_lead')):
@@ -137,6 +204,35 @@ class LeadViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'], url_path='staff-users')
+    def staff_users(self, request):
+        users = User.objects.filter(is_active=True).filter(
+            Q(is_staff=True) | Q(is_superuser=True) | Q(groups__name='Staff')
+        ).distinct().order_by('first_name', 'username')
+        serializer = StaffUserSerializer(users, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='activities')
+    def activities(self, request, pk=None):
+        lead = self.get_object()
+        if request.method == 'GET':
+            qs = lead.activities.all().order_by('-created_at')
+            serializer = LeadActivitySerializer(qs, many=True)
+            return Response(serializer.data)
+
+        activity_type = str(request.data.get('activity_type') or 'note').strip()
+        content = str(request.data.get('content') or '').strip()
+        if not content:
+            return Response({'error': 'Activity content is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        activity = LeadActivity.objects.create(
+            lead=lead,
+            author=request.user,
+            activity_type=activity_type,
+            content=content
+        )
+        return Response(LeadActivitySerializer(activity).data, status=status.HTTP_201_CREATED)
 
 
 class CountryViewSet(viewsets.ReadOnlyModelViewSet):

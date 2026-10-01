@@ -45,6 +45,8 @@ class Lead(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
     source = models.CharField(max_length=100, default='ai_assessment')
     notes = models.TextField(blank=True)
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_leads')
+    next_follow_up = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,12 +54,43 @@ class Lead(models.Model):
     def __str__(self):
         return f"{self.name} — {self.email}"
 
+    @property
+    def is_overdue(self):
+        if self.next_follow_up and self.status not in ['converted', 'lost']:
+            return self.next_follow_up < timezone.now()
+        return False
+
     class Meta:
         ordering = ['-created_at']
         permissions = [
             ("can_delete_lead", "Can delete lead records"),
             ("can_export_leads", "Can export lead data"),
         ]
+
+
+class LeadActivity(models.Model):
+    ACTIVITY_TYPES = [
+        ('note', 'Note'),
+        ('call', 'Call'),
+        ('whatsapp', 'WhatsApp'),
+        ('status_change', 'Status Change'),
+        ('assignment', 'Assignment'),
+        ('followup', 'Follow-up'),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='activities')
+    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='lead_activities')
+    activity_type = models.CharField(max_length=50, choices=ACTIVITY_TYPES, default='note')
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        author_name = self.author.get_full_name() or self.author.username if self.author else 'System'
+        return f"{self.activity_type.title()} on {self.lead.name} by {author_name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
 
 
 class Questionnaire(models.Model):

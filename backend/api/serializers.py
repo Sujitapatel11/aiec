@@ -1,8 +1,34 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
 from .models import (
-    Lead, Questionnaire, Country, Course,
+    Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument
 )
+
+
+class StaffUserSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'name', 'email']
+
+    def get_name(self, obj):
+        return obj.get_full_name() or obj.username
+
+
+class LeadActivitySerializer(serializers.ModelSerializer):
+    author_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeadActivity
+        fields = ['id', 'lead', 'author', 'author_name', 'activity_type', 'content', 'created_at']
+        read_only_fields = ['author', 'created_at']
+
+    def get_author_name(self, obj):
+        if obj.author:
+            return obj.author.get_full_name() or obj.author.username
+        return 'System'
 
 
 class StudentDocumentSerializer(serializers.ModelSerializer):
@@ -32,9 +58,17 @@ class StudentDocumentSerializer(serializers.ModelSerializer):
 
 
 class LeadSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Lead
         fields = '__all__'
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
 
     def validate_marks(self, value):
         if value is not None and not 0 <= value <= 100:
@@ -99,10 +133,18 @@ class CourseSerializer(serializers.ModelSerializer):
 
 class LeadDetailSerializer(serializers.ModelSerializer):
     questionnaire = QuestionnaireSerializer(read_only=True)
+    activities = LeadActivitySerializer(many=True, read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Lead
         fields = '__all__'
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
 
 
 class LeadCaptureSerializer(serializers.Serializer):

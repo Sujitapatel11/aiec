@@ -57,6 +57,9 @@ export const getLeads          = (page = 1, filters = {}) => api.get('/leads/', 
 export const createLead        = (data)     => api.post('/leads/', data)
 export const getLead           = (id)       => api.get(`/leads/${id}/`)
 export const updateLead        = (id, data) => api.patch(`/leads/${id}/`, data)
+export const getStaffUsers     = ()         => api.get('/leads/staff-users/')
+export const getLeadActivities = (id)       => api.get(`/leads/${id}/activities/`)
+export const addLeadActivity   = (id, data) => api.post(`/leads/${id}/activities/`, data)
 export const getDashboardStats = ()         => api.get('/dashboard/stats/')
 
 // Student Enrollment & Process Tracking

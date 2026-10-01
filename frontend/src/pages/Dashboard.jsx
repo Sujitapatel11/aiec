@@ -1,13 +1,19 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getLeads, createLead, getDashboardStats, updateLead, adminLogout,
+  getLeads, createLead, getLead, getDashboardStats, updateLead, adminLogout,
+  getStaffUsers, getLeadActivities, addLeadActivity,
   getStudents, getStudentDetail, enrollStudent, deleteStudent,
   addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment,
   getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial,
   uploadStudentDocument, verifyStudentDocument, deleteStudentDocument,
   resetStudentPassword
 } from '../api'
+
+import LeadFilters from '../components/leads/LeadFilters'
+import LeadList from '../components/leads/LeadList'
+import LeadForm from '../components/leads/LeadForm'
+import LeadDetail from '../components/leads/LeadDetail'
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 const STATUS_OPTIONS = [
@@ -339,12 +345,68 @@ export default function Dashboard() {
     }
   }, [])
 
+  const [staffUsers, setStaffUsers]       = useState([])
+
+  const fetchStaffUsers = useCallback(async () => {
+    try {
+      const res = await getStaffUsers()
+      setStaffUsers(res.data)
+    } catch {
+      // silent fallback
+    }
+  }, [])
+
+  const handleSelectLead = async (leadSummary) => {
+    try {
+      const res = await getLead(leadSummary.id)
+      setSelectedLead(res.data)
+    } catch {
+      setSelectedLead(leadSummary)
+    }
+  }
+
+  const handleAssignChange = async (leadId, staffUserId) => {
+    try {
+      await updateLead(leadId, { assigned_to: staffUserId })
+      setActionNotice('Staff assignment updated successfully.')
+      setTimeout(() => setActionNotice(''), 3000)
+      fetchLeads()
+      handleSelectLead({ id: leadId })
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update lead assignment.')
+    }
+  }
+
+  const handleFollowUpChange = async (leadId, followUpDateStr) => {
+    try {
+      await updateLead(leadId, { next_follow_up: followUpDateStr })
+      setActionNotice('Follow-up schedule updated.')
+      setTimeout(() => setActionNotice(''), 3000)
+      fetchLeads()
+      handleSelectLead({ id: leadId })
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update follow-up date.')
+    }
+  }
+
+  const handleAddActivity = async (leadId, data) => {
+    try {
+      await addLeadActivity(leadId, data)
+      setActionNotice('Interaction logged successfully.')
+      setTimeout(() => setActionNotice(''), 3000)
+      handleSelectLead({ id: leadId })
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to log activity.')
+    }
+  }
+
   useEffect(() => {
     fetchStats()
     fetchLeads()
     fetchStudents()
     fetchVideoTestimonials()
-  }, [fetchStats, fetchLeads, fetchStudents, fetchVideoTestimonials])
+    fetchStaffUsers()
+  }, [fetchStats, fetchLeads, fetchStudents, fetchVideoTestimonials, fetchStaffUsers])
 
   const handleVideoUpload = async (e) => {
     e.preventDefault()
@@ -767,126 +829,55 @@ export default function Dashboard() {
 
         {/* ── TAB 1: LEADS ────────────────────────────────────────── */}
         {activeTab === 'leads' && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="font-bold text-gray-900">Student Inquiries & Leads</h2>
-                {!loading && <p className="text-xs text-gray-400 mt-0.5">{totalCount} total leads · Click row for details</p>}
-              </div>
+          <div className="space-y-4">
+            <LeadFilters
+              search={search}
+              setSearch={(val) => { setSearch(val); setPage(1) }}
+              statusFilter={statusFilter}
+              setStatusFilter={(val) => { setStatusFilter(val); setPage(1) }}
+              countryFilter={countryFilter}
+              setCountryFilter={(val) => { setCountryFilter(val); setPage(1) }}
+              courseFilter={courseFilter}
+              setCourseFilter={(val) => { setCourseFilter(val); setPage(1) }}
+              countryOptions={stats?.filter_options?.countries || []}
+              courseOptions={stats?.filter_options?.courses || []}
+              onReset={() => {
+                setSearch('')
+                setStatusFilter('')
+                setCountryFilter('')
+                setCourseFilter('')
+                setPage(1)
+              }}
+            />
 
-              <div className="flex flex-wrap gap-2">
-                <input
-                  type="text"
-                  placeholder="Search leads..."
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-44"
-                />
-                <select
-                  value={statusFilter}
-                  onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-36"
-                  aria-label="Filter leads by status"
-                >
-                  <option value="">All statuses</option>
-                  {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-                <select
-                  value={countryFilter}
-                  onChange={e => { setCountryFilter(e.target.value); setPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-40"
-                  aria-label="Filter leads by country"
-                >
-                  <option value="">All countries</option>
-                  {(stats?.filter_options?.countries || []).map(country => <option key={country} value={country}>{country}</option>)}
-                </select>
-                <select
-                  value={courseFilter}
-                  onChange={e => { setCourseFilter(e.target.value); setPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-40"
-                  aria-label="Filter leads by course"
-                >
-                  <option value="">All courses</option>
-                  {(stats?.filter_options?.courses || []).map(course => <option key={course} value={course}>{course}</option>)}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => { setLeadFormError(''); setLeadModal(true) }}
-                  className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
-                >
-                  + Add Lead
-                </button>
-              </div>
-            </div>
+            <LeadList
+              leads={leads}
+              loading={loading}
+              page={page}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              onPageChange={(p) => setPage(p)}
+              onSelectLead={handleSelectLead}
+              onCreateClick={() => setLeadModal(true)}
+            />
 
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left">Name</th>
-                      <th className="px-5 py-3 text-left">Phone</th>
-                      <th className="px-5 py-3 text-left">Course</th>
-                      <th className="px-5 py-3 text-left">Budget</th>
-                      <th className="px-5 py-3 text-left">Rec. Country</th>
-                      <th className="px-5 py-3 text-left">Status</th>
-                      <th className="px-5 py-3 text-left">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {leads.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-16 text-center text-gray-400">
-                          No leads found.
-                        </td>
-                      </tr>
-                    )}
-                    {leads.map(lead => (
-                      <tr
-                        key={lead.id}
-                        onClick={() => setSelectedLead(lead)}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors"
-                      >
-                        <td className="px-5 py-3.5">
-                          <p className="font-semibold text-gray-900">{lead.name}</p>
-                          <p className="text-xs text-gray-400">{lead.email}</p>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600">{lead.phone || '—'}</td>
-                        <td className="px-5 py-3.5 text-gray-600 max-w-[160px] truncate">{lead.course_interest || '—'}</td>
-                        <td className="px-5 py-3.5 text-gray-600">
-                          {lead.budget ? `$${Number(lead.budget).toLocaleString()}` : '—'}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {lead.recommended_country
-                            ? <span className="text-xs bg-slate-100 text-slate-800 font-semibold px-2 py-1 rounded-full whitespace-nowrap">
-                                {flag(lead.recommended_country)}{lead.recommended_country}
-                              </span>
-                            : <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                          <select
-                            value={lead.status}
-                            onChange={e => handleStatusChange(lead.id, e.target.value)}
-                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none ${statusColor(lead.status)}`}
-                          >
-                            {STATUS_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-400 text-xs whitespace-nowrap">
-                          {new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <LeadForm
+              isOpen={leadModal}
+              onClose={() => setLeadModal(false)}
+              onSubmit={handleLeadSubmit}
+            />
+
+            <LeadDetail
+              lead={selectedLead}
+              onClose={() => setSelectedLead(null)}
+              onStatusChange={handleStatusChange}
+              onAssignChange={handleAssignChange}
+              onFollowUpChange={handleFollowUpChange}
+              onAddActivity={handleAddActivity}
+              staffUsers={staffUsers}
+              isAdmin={isAdmin}
+              currentUserId={currentUserId}
+            />
           </div>
         )}
 
