@@ -874,6 +874,7 @@ export default function Dashboard() {
               onAssignChange={handleAssignChange}
               onFollowUpChange={handleFollowUpChange}
               onAddActivity={handleAddActivity}
+              onRefreshLead={handleSelectLead}
               staffUsers={staffUsers}
               isAdmin={isAdmin}
               currentUserId={currentUserId}

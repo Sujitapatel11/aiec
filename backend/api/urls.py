@@ -6,6 +6,10 @@ router = DefaultRouter()
 router.register('leads', views.LeadViewSet)
 router.register('countries', views.CountryViewSet)
 router.register('courses', views.CourseViewSet)
+router.register('counselling-notes', views.CounsellingNoteViewSet)
+router.register('follow-ups', views.FollowUpViewSet)
+router.register('tasks', views.TaskViewSet)
+router.register('appointments', views.AppointmentViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

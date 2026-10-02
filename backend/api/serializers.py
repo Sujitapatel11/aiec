@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
+    CounsellingNote, FollowUp, Task, Appointment
 )
 
 
@@ -131,9 +132,139 @@ class CourseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CounsellingNoteSerializer(serializers.ModelSerializer):
+    author_name = serializers.SerializerMethodField()
+    lead_name = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CounsellingNote
+        fields = [
+            'id', 'lead', 'lead_name', 'student', 'student_name',
+            'author', 'author_name', 'content', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['author', 'created_at', 'updated_at']
+
+    def get_author_name(self, obj):
+        if obj.author:
+            return obj.author.get_full_name() or obj.author.username
+        return 'System'
+
+    def get_lead_name(self, obj):
+        return obj.lead.name if obj.lead else None
+
+    def get_student_name(self, obj):
+        return obj.student.full_name if obj.student else None
+
+
+class FollowUpSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    lead_name = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = FollowUp
+        fields = [
+            'id', 'lead', 'lead_name', 'student', 'student_name',
+            'assigned_to', 'assigned_to_name', 'created_by', 'created_by_name',
+            'title', 'description', 'due_at', 'status', 'priority',
+            'is_overdue', 'completed_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return 'System'
+
+    def get_lead_name(self, obj):
+        return obj.lead.name if obj.lead else None
+
+    def get_student_name(self, obj):
+        return obj.student.full_name if obj.student else None
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    lead_name = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'lead', 'lead_name', 'student', 'student_name',
+            'assigned_to', 'assigned_to_name', 'created_by', 'created_by_name',
+            'title', 'description', 'due_at', 'status', 'priority',
+            'is_overdue', 'completed_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return 'System'
+
+    def get_lead_name(self, obj):
+        return obj.lead.name if obj.lead else None
+
+    def get_student_name(self, obj):
+        return obj.student.full_name if obj.student else None
+
+
+class AppointmentSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    lead_name = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = [
+            'id', 'lead', 'lead_name', 'student', 'student_name',
+            'assigned_to', 'assigned_to_name', 'created_by', 'created_by_name',
+            'title', 'appointment_date', 'duration_minutes', 'location_mode',
+            'notes', 'status', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return 'System'
+
+    def get_lead_name(self, obj):
+        return obj.lead.name if obj.lead else None
+
+    def get_student_name(self, obj):
+        return obj.student.full_name if obj.student else None
+
+
 class LeadDetailSerializer(serializers.ModelSerializer):
     questionnaire = QuestionnaireSerializer(read_only=True)
     activities = LeadActivitySerializer(many=True, read_only=True)
+    counselling_notes = CounsellingNoteSerializer(many=True, read_only=True)
+    follow_ups = FollowUpSerializer(many=True, read_only=True)
+    tasks = TaskSerializer(many=True, read_only=True)
+    appointments = AppointmentSerializer(many=True, read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
 

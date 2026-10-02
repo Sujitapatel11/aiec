@@ -76,6 +76,10 @@ class LeadActivity(models.Model):
         ('status_change', 'Status Change'),
         ('assignment', 'Assignment'),
         ('followup', 'Follow-up'),
+        # Phase 1.3 — Counselling Operations
+        ('counselling_note', 'Counselling Note'),
+        ('task', 'Task'),
+        ('appointment', 'Appointment'),
     ]
 
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='activities')
@@ -276,5 +280,129 @@ class StudentDocument(models.Model):
 
     class Meta:
         ordering = ['-uploaded_at', '-id']
+
+
+# ── CRM Counselling, Follow-ups, Tasks & Appointments ───────────────────────
+
+class CounsellingNote(models.Model):
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='counselling_notes')
+    student = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='counselling_notes')
+    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='authored_counselling_notes')
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        target = self.lead.name if self.lead else (self.student.full_name if self.student else 'General')
+        author_name = self.author.get_full_name() or self.author.username if self.author else 'System'
+        return f"Counselling Note for {target} by {author_name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class FollowUp(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='follow_ups')
+    student = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='follow_ups')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_follow_ups')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_follow_ups')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    due_at = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_overdue(self):
+        if self.due_at and self.status == 'pending':
+            return self.due_at < timezone.now()
+        return False
+
+    def __str__(self):
+        return f"Follow-up: {self.title} [{self.status}]"
+
+    class Meta:
+        ordering = ['due_at', '-created_at']
+
+
+class Task(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='tasks')
+    student = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='tasks')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tasks')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    due_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_overdue(self):
+        if self.due_at and self.status in ['pending', 'in_progress']:
+            return self.due_at < timezone.now()
+        return False
+
+    def __str__(self):
+        return f"Task: {self.title} [{self.status}]"
+
+    class Meta:
+        ordering = ['due_at', '-created_at']
+
+
+class Appointment(models.Model):
+    STATUS_CHOICES = [
+        ('scheduled', 'Scheduled'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+        ('no_show', 'No Show'),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='appointments')
+    student = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='appointments')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='counselor_appointments')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_appointments')
+    title = models.CharField(max_length=200)
+    appointment_date = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField(default=30)
+    location_mode = models.CharField(max_length=100, default='In-Person Office')
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Appointment: {self.title} on {self.appointment_date}"
+
+    class Meta:
+        ordering = ['appointment_date', '-created_at']
 
 

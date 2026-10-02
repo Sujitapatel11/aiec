@@ -12,7 +12,8 @@ import re
 
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument, DEFAULT_CHECKLIST_TEMPLATE
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument, DEFAULT_CHECKLIST_TEMPLATE,
+    CounsellingNote, FollowUp, Task, Appointment
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -20,7 +21,8 @@ from .serializers import (
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
     StudentProfileSerializer, StudentEnrollmentSerializer,
-    ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer
+    ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer,
+    CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer
 )
 from . import cloudinary_service
 from .cloudinary_service import (
@@ -82,7 +84,22 @@ class LeadViewSet(viewsets.ModelViewSet):
         return LeadSerializer
 
     def get_queryset(self):
-        qs = Lead.objects.all()
+        # For detail view, prefetch nested counselling collections to avoid N+1
+        if self.action == 'retrieve':
+            qs = Lead.objects.prefetch_related(
+                'activities__author',
+                'counselling_notes__author',
+                'follow_ups__assigned_to',
+                'follow_ups__created_by',
+                'tasks__assigned_to',
+                'tasks__created_by',
+                'appointments__assigned_to',
+                'appointments__created_by',
+                'questionnaire',
+            ).select_related('assigned_to')
+        else:
+            qs = Lead.objects.select_related('assigned_to')
+
         country = self.request.query_params.get('country', '').strip()
         course  = self.request.query_params.get('course', '').strip()
         status_param  = self.request.query_params.get('status', '').strip()
@@ -233,6 +250,288 @@ class LeadViewSet(viewsets.ModelViewSet):
             content=content
         )
         return Response(LeadActivitySerializer(activity).data, status=status.HTTP_201_CREATED)
+
+
+# ── CRM Counselling, Follow-ups, Tasks & Appointments ViewSets ────────────
+
+class CounsellingNoteViewSet(viewsets.ModelViewSet):
+    # Phase 1.3 — select_related to avoid N+1 on author/lead/student lookups
+    queryset = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
+    serializer_class = CounsellingNoteSerializer
+    permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+            self.permission_denied(request, message='Admin or Staff permissions required.')
+
+    def get_queryset(self):
+        qs = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
+        lead_id = self.request.query_params.get('lead')
+        student_id = self.request.query_params.get('student')
+        if lead_id:
+            qs = qs.filter(lead_id=lead_id)
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        note = serializer.save(author=self.request.user)
+        # Auto-log activity on the associated lead's timeline
+        if note.lead:
+            author_name = self.request.user.get_full_name() or self.request.user.username
+            LeadActivity.objects.create(
+                lead=note.lead,
+                author=self.request.user,
+                activity_type='counselling_note',
+                content=f"Counselling note added by {author_name}: {note.content[:120]}{'…' if len(note.content) > 120 else ''}"
+            )
+
+
+class FollowUpViewSet(viewsets.ModelViewSet):
+    # Phase 1.3 — select_related to avoid N+1
+    queryset = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+    serializer_class = FollowUpSerializer
+    permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+            self.permission_denied(request, message='Admin or Staff permissions required.')
+
+    def get_queryset(self):
+        qs = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        lead_id = self.request.query_params.get('lead')
+        student_id = self.request.query_params.get('student')
+        status_param = self.request.query_params.get('status')
+        priority_param = self.request.query_params.get('priority')
+        assigned_to_param = self.request.query_params.get('assigned_to')
+        overdue_param = self.request.query_params.get('overdue')
+
+        if lead_id:
+            qs = qs.filter(lead_id=lead_id)
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        if status_param:
+            qs = qs.filter(status=status_param)
+        if priority_param:
+            qs = qs.filter(priority=priority_param)
+        if assigned_to_param:
+            qs = qs.filter(assigned_to_id=assigned_to_param)
+        if overdue_param == 'true':
+            from django.utils import timezone
+            qs = qs.filter(status='pending', due_at__lt=timezone.now())
+
+        return qs.order_by('due_at', '-created_at')
+
+    def perform_create(self, serializer):
+        from django.utils import timezone as tz
+        followup = serializer.save(created_by=self.request.user)
+        # Sync lead.next_follow_up to the earliest pending follow-up
+        if followup.lead and followup.due_at and followup.status == 'pending':
+            lead = followup.lead
+            if not lead.next_follow_up or followup.due_at < lead.next_follow_up:
+                lead.next_follow_up = followup.due_at
+                lead.save()
+        # Auto-log activity on the lead timeline
+        if followup.lead:
+            due_str = followup.due_at.strftime('%d %b %Y %H:%M') if followup.due_at else 'N/A'
+            assignee = followup.assigned_to.get_full_name() or followup.assigned_to.username if followup.assigned_to else 'Unassigned'
+            creator = self.request.user.get_full_name() or self.request.user.username
+            LeadActivity.objects.create(
+                lead=followup.lead,
+                author=self.request.user,
+                activity_type='followup',
+                content=f"Follow-up created by {creator}: '{followup.title}' · Due: {due_str} · Assigned to: {assignee} · Priority: {followup.priority}"
+            )
+
+    def perform_update(self, serializer):
+        from django.utils import timezone as tz
+        old_status = serializer.instance.status
+        old_instance = serializer.instance
+        new_status = self.request.data.get('status', old_status)
+        completed_at = serializer.instance.completed_at
+        if new_status == 'completed' and old_status != 'completed':
+            completed_at = tz.now()
+
+        followup = serializer.save(completed_at=completed_at)
+
+        # Sync lead.next_follow_up
+        if followup.lead:
+            lead = followup.lead
+            earliest_pending = FollowUp.objects.filter(lead=lead, status='pending').order_by('due_at').first()
+            lead.next_follow_up = earliest_pending.due_at if earliest_pending else None
+            lead.save()
+
+        # Auto-log status transitions on the lead timeline
+        if followup.lead and new_status != old_status:
+            actor = self.request.user.get_full_name() or self.request.user.username
+            if new_status == 'completed':
+                msg = f"Follow-up completed by {actor}: '{followup.title}'"
+            elif new_status == 'cancelled':
+                msg = f"Follow-up cancelled by {actor}: '{followup.title}'"
+            else:
+                msg = f"Follow-up '{followup.title}' updated to '{new_status}' by {actor}"
+            LeadActivity.objects.create(
+                lead=followup.lead,
+                author=self.request.user,
+                activity_type='followup',
+                content=msg
+            )
+
+
+class TaskViewSet(viewsets.ModelViewSet):
+    # Phase 1.3 — select_related to avoid N+1
+    queryset = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+            self.permission_denied(request, message='Admin or Staff permissions required.')
+
+    def get_queryset(self):
+        qs = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        lead_id = self.request.query_params.get('lead')
+        student_id = self.request.query_params.get('student')
+        status_param = self.request.query_params.get('status')
+        priority_param = self.request.query_params.get('priority')
+        assigned_to_param = self.request.query_params.get('assigned_to')
+        overdue_param = self.request.query_params.get('overdue')  # Phase 1.3 — parity with FollowUp
+
+        if lead_id:
+            qs = qs.filter(lead_id=lead_id)
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        if status_param:
+            qs = qs.filter(status=status_param)
+        if priority_param:
+            qs = qs.filter(priority=priority_param)
+        if assigned_to_param:
+            qs = qs.filter(assigned_to_id=assigned_to_param)
+        if overdue_param == 'true':
+            from django.utils import timezone
+            qs = qs.filter(status__in=['pending', 'in_progress'], due_at__lt=timezone.now())
+
+        return qs.order_by('due_at', '-created_at')
+
+    def perform_create(self, serializer):
+        task = serializer.save(created_by=self.request.user)
+        # Auto-log activity on the lead timeline
+        if task.lead:
+            creator = self.request.user.get_full_name() or self.request.user.username
+            due_str = task.due_at.strftime('%d %b %Y %H:%M') if task.due_at else 'No due date'
+            assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+            LeadActivity.objects.create(
+                lead=task.lead,
+                author=self.request.user,
+                activity_type='task',
+                content=f"Task created by {creator}: '{task.title}' · Due: {due_str} · Assigned to: {assignee} · Priority: {task.priority}"
+            )
+
+    def perform_update(self, serializer):
+        from django.utils import timezone as tz
+        old_status = serializer.instance.status
+        new_status = self.request.data.get('status', old_status)
+        completed_at = serializer.instance.completed_at
+        if new_status == 'completed' and old_status != 'completed':
+            completed_at = tz.now()
+        task = serializer.save(completed_at=completed_at)
+
+        # Auto-log status transitions on the lead timeline
+        if task.lead and new_status != old_status:
+            actor = self.request.user.get_full_name() or self.request.user.username
+            if new_status == 'completed':
+                msg = f"Task completed by {actor}: '{task.title}'"
+            elif new_status == 'cancelled':
+                msg = f"Task cancelled by {actor}: '{task.title}'"
+            elif new_status == 'in_progress':
+                msg = f"Task started by {actor}: '{task.title}'"
+            else:
+                msg = f"Task '{task.title}' updated to '{new_status}' by {actor}"
+            LeadActivity.objects.create(
+                lead=task.lead,
+                author=self.request.user,
+                activity_type='task',
+                content=msg
+            )
+
+
+class AppointmentViewSet(viewsets.ModelViewSet):
+    # Phase 1.3 — select_related to avoid N+1
+    queryset = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+    serializer_class = AppointmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
+            self.permission_denied(request, message='Admin or Staff permissions required.')
+
+    def get_queryset(self):
+        qs = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        lead_id = self.request.query_params.get('lead')
+        student_id = self.request.query_params.get('student')
+        status_param = self.request.query_params.get('status')
+        assigned_to_param = self.request.query_params.get('assigned_to')
+        # Phase 1.3 — date-range filters: upcoming=true (future), past=true (past)
+        upcoming_param = self.request.query_params.get('upcoming')
+        past_param = self.request.query_params.get('past')
+
+        if lead_id:
+            qs = qs.filter(lead_id=lead_id)
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        if status_param:
+            qs = qs.filter(status=status_param)
+        if assigned_to_param:
+            qs = qs.filter(assigned_to_id=assigned_to_param)
+        if upcoming_param == 'true':
+            from django.utils import timezone
+            qs = qs.filter(appointment_date__gte=timezone.now())
+        if past_param == 'true':
+            from django.utils import timezone
+            qs = qs.filter(appointment_date__lt=timezone.now())
+
+        return qs.order_by('appointment_date', '-created_at')
+
+    def perform_create(self, serializer):
+        appointment = serializer.save(created_by=self.request.user)
+        # Auto-log activity on the lead timeline
+        if appointment.lead:
+            creator = self.request.user.get_full_name() or self.request.user.username
+            date_str = appointment.appointment_date.strftime('%d %b %Y %H:%M') if appointment.appointment_date else 'N/A'
+            assignee = appointment.assigned_to.get_full_name() or appointment.assigned_to.username if appointment.assigned_to else 'Unassigned'
+            LeadActivity.objects.create(
+                lead=appointment.lead,
+                author=self.request.user,
+                activity_type='appointment',
+                content=f"Appointment scheduled by {creator}: '{appointment.title}' · Date: {date_str} · Mode: {appointment.location_mode} · With: {assignee}"
+            )
+
+    def perform_update(self, serializer):
+        old_status = serializer.instance.status
+        new_status = self.request.data.get('status', old_status)
+        appointment = serializer.save()
+
+        # Auto-log status transitions on the lead timeline
+        if appointment.lead and new_status != old_status:
+            actor = self.request.user.get_full_name() or self.request.user.username
+            if new_status == 'completed':
+                msg = f"Appointment completed by {actor}: '{appointment.title}'"
+            elif new_status == 'cancelled':
+                msg = f"Appointment cancelled by {actor}: '{appointment.title}'"
+            elif new_status == 'no_show':
+                msg = f"Appointment marked no-show by {actor}: '{appointment.title}'"
+            else:
+                msg = f"Appointment '{appointment.title}' updated to '{new_status}' by {actor}"
+            LeadActivity.objects.create(
+                lead=appointment.lead,
+                author=self.request.user,
+                activity_type='appointment',
+                content=msg
+            )
 
 
 class CountryViewSet(viewsets.ReadOnlyModelViewSet):

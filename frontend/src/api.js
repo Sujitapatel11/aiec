@@ -90,5 +90,31 @@ export const getStudentDocuments   = (studentId) => api.get(`/documents/${studen
 export const verifyStudentDocument  = (id, data) => api.patch(`/documents/${id}/status/`, data)
 export const deleteStudentDocument  = (id)       => api.delete(`/documents/${id}/`)
 
+// ── Phase 1.3 — Counselling Operations ────────────────────────────────────
+
+// Counselling Notes
+export const getCounsellingNotes   = (params = {}) => api.get('/counselling-notes/', { params })
+export const createCounsellingNote = (data)        => api.post('/counselling-notes/', data)
+export const updateCounsellingNote = (id, data)    => api.patch(`/counselling-notes/${id}/`, data)
+export const deleteCounsellingNote = (id)          => api.delete(`/counselling-notes/${id}/`)
+
+// Follow-ups
+export const getFollowUps    = (params = {}) => api.get('/follow-ups/', { params })
+export const createFollowUp  = (data)        => api.post('/follow-ups/', data)
+export const updateFollowUp  = (id, data)    => api.patch(`/follow-ups/${id}/`, data)
+export const deleteFollowUp  = (id)          => api.delete(`/follow-ups/${id}/`)
+
+// Tasks
+export const getTasks    = (params = {}) => api.get('/tasks/', { params })
+export const createTask  = (data)        => api.post('/tasks/', data)
+export const updateTask  = (id, data)    => api.patch(`/tasks/${id}/`, data)
+export const deleteTask  = (id)          => api.delete(`/tasks/${id}/`)
+
+// Appointments
+export const getAppointments    = (params = {}) => api.get('/appointments/', { params })
+export const createAppointment  = (data)        => api.post('/appointments/', data)
+export const updateAppointment  = (id, data)    => api.patch(`/appointments/${id}/`, data)
+export const deleteAppointment  = (id)          => api.delete(`/appointments/${id}/`)
+
 export default api
 
