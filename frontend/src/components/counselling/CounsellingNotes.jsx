@@ -6,7 +6,7 @@
 import React, { useState } from 'react'
 import { createCounsellingNote, deleteCounsellingNote } from '../../api'
 
-export default function CounsellingNotes({ leadId, notes = [], onRefresh, isAdmin = false }) {
+export default function CounsellingNotes({ leadId, studentId, notes = [], onRefresh, isAdmin = false }) {
   const [content, setContent]     = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState('')
@@ -17,7 +17,11 @@ export default function CounsellingNotes({ leadId, notes = [], onRefresh, isAdmi
     setError('')
     setSubmitting(true)
     try {
-      await createCounsellingNote({ lead: leadId, content: content.trim() })
+      // Support both lead-context and student-context notes
+      const payload = { content: content.trim() }
+      if (studentId) payload.student = studentId
+      else if (leadId) payload.lead = leadId
+      await createCounsellingNote(payload)
       setContent('')
       onRefresh()
     } catch (err) {

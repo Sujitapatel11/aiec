@@ -363,9 +363,14 @@ class ProcessStepSerializer(serializers.ModelSerializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     process_steps = ProcessStepSerializer(many=True, read_only=True)
     documents = StudentDocumentSerializer(many=True, read_only=True)
+    counselling_notes = CounsellingNoteSerializer(many=True, read_only=True)
+    follow_ups = FollowUpSerializer(many=True, read_only=True)
+    tasks = TaskSerializer(many=True, read_only=True)
+    appointments = AppointmentSerializer(many=True, read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     enrolled_by_name = serializers.SerializerMethodField()
+    lead_name = serializers.SerializerMethodField()
     total_estimated_cost = serializers.SerializerMethodField()
     total_paid = serializers.SerializerMethodField()
     pending_balance = serializers.SerializerMethodField()
@@ -375,13 +380,19 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone', 'destination_country',
             'enrollment_date', 'enrolled_by', 'enrolled_by_name', 'notes',
-            'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance'
+            # Phase 1.4
+            'status', 'lead', 'lead_name',
+            'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance',
+            'counselling_notes', 'follow_ups', 'tasks', 'appointments',
         ]
 
     def get_enrolled_by_name(self, obj):
         if obj.enrolled_by:
             return obj.enrolled_by.get_full_name() or obj.enrolled_by.username
         return 'System'
+
+    def get_lead_name(self, obj):
+        return obj.lead.name if obj.lead else None
 
     def get_total_estimated_cost(self, obj):
         return sum(step.estimated_cost for step in obj.process_steps.all())
@@ -394,6 +405,53 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
     def get_pending_balance(self, obj):
         return max(0.00, float(self.get_total_estimated_cost(obj)) - float(self.get_total_paid(obj)))
+
+
+class StudentPortalProfileSerializer(StudentProfileSerializer):
+    class Meta(StudentProfileSerializer.Meta):
+        fields = [
+            'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone',
+            'destination_country', 'enrollment_date', 'enrolled_by', 'enrolled_by_name',
+            'notes', 'status', 'lead', 'lead_name', 'process_steps', 'documents',
+            'total_estimated_cost', 'total_paid', 'pending_balance',
+        ]
+
+
+class StudentProfileUpdateSerializer(serializers.ModelSerializer):
+    """
+    Used by PATCH /api/students/<pk>/.
+    Only the fields a counsellor is allowed to update after enrollment.
+    student_id, user, enrollment_date, enrolled_by are intentionally excluded.
+    """
+    class Meta:
+        model = StudentProfile
+        fields = ['full_name', 'phone', 'destination_country', 'notes', 'status']
+
+    def validate_status(self, value):
+        valid = {c[0] for c in StudentProfile.STUDENT_STATUS_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(
+                f"Invalid status. Must be one of: {', '.join(sorted(valid))}."
+            )
+        return value
+
+    def validate_full_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Full name cannot be blank.")
+        return value
+
+    def validate_phone(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Phone cannot be blank.")
+        return value
+
+    def validate_destination_country(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Destination country cannot be blank.")
+        return value
 
 
 class StudentEnrollmentSerializer(serializers.Serializer):

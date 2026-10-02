@@ -33,7 +33,7 @@ function isTaskOverdue(task) {
 
 const EMPTY_FORM = { title: '', description: '', due_at: '', priority: 'medium', assigned_to: '' }
 
-export default function TaskList({ leadId, tasks = [], staffUsers = [], onRefresh }) {
+export default function TaskList({ leadId, studentId, tasks = [], staffUsers = [], onRefresh }) {
   const [showForm, setShowForm]     = useState(false)
   const [form, setForm]             = useState(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
@@ -45,14 +45,16 @@ export default function TaskList({ leadId, tasks = [], staffUsers = [], onRefres
     setFormError('')
     setSubmitting(true)
     try {
-      await createTask({
-        lead: leadId,
+      const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
         due_at: form.due_at ? new Date(form.due_at).toISOString() : undefined,
         priority: form.priority,
         assigned_to: form.assigned_to || undefined,
-      })
+      }
+      if (studentId) payload.student = studentId
+      else if (leadId) payload.lead = leadId
+      await createTask(payload)
       setForm(EMPTY_FORM)
       setShowForm(false)
       onRefresh()

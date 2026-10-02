@@ -64,14 +64,18 @@ export const getDashboardStats = ()         => api.get('/dashboard/stats/')
 
 // Student Enrollment & Process Tracking
 export const enrollStudent        = (data)           => api.post('/students/enroll/', data)
-export const getStudents          = ()               => api.get('/students/')
+export const getStudents          = (params = {})    => api.get('/students/', { params })
 export const getStudentDetail     = (id)             => api.get(`/students/${id}/`)
+export const updateStudentProfile = (id, data)       => api.patch(`/students/${id}/`, data)
 export const deleteStudent        = (id)             => api.delete(`/students/${id}/`)
 export const addProcessStep       = (studentId, data)=> api.post(`/students/${studentId}/steps/`, data)
 export const updateProcessStep    = (stepId, data)   => api.patch(`/steps/${stepId}/`, data)
 export const deleteProcessStep    = (stepId)         => api.delete(`/steps/${stepId}/`)
 export const addStepPayment       = (stepId, data)   => api.post(`/steps/${stepId}/payments/`, data)
 export const getStudentPortalMe   = ()               => api.get('/student-portal/my-profile/')
+
+// Phase 1.4 — Lead → Student conversion
+export const convertLeadToStudent = (leadId, data)   => api.post(`/leads/${leadId}/convert-to-student/`, data)
 
 // Video Testimonials API
 export const getPublicVideoTestimonials = ()           => api.get('/testimonials/video/public/')
@@ -115,6 +119,22 @@ export const getAppointments    = (params = {}) => api.get('/appointments/', { p
 export const createAppointment  = (data)        => api.post('/appointments/', data)
 export const updateAppointment  = (id, data)    => api.patch(`/appointments/${id}/`, data)
 export const deleteAppointment  = (id)          => api.delete(`/appointments/${id}/`)
+
+// ── Phase A — Lead WhatsApp Messaging ─────────────────────────────────────
+
+/**
+ * Send an outbound WhatsApp message from the AIEC Business number to a lead.
+ *
+ * The recipient phone number is NEVER supplied by the caller — the backend
+ * retrieves it server-side from the Lead record, preventing IDOR/recipient
+ * manipulation.
+ *
+ * @param {number|string} leadId  - Lead primary key
+ * @param {string}        message - Message body (1–1000 chars, validated server-side)
+ * @returns {Promise}             - Resolves to { sent, activity_id, message }
+ */
+export const sendLeadWhatsApp = (leadId, message) =>
+  api.post(`/leads/${leadId}/send-whatsapp/`, { message })
 
 export default api
 

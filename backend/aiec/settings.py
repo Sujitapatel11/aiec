@@ -137,6 +137,37 @@ REST_FRAMEWORK = {
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 WHATSAPP_NUMBER = os.getenv('WHATSAPP_NUMBER', '+919999999999')
 
+# ── Student Management Configuration ─────────────────────────────────────
+# STUDENT_ID_PREFIX: prefix for generated student IDs.
+# Default 'STU' is generic and reusable across consultancy tenants.
+# AIEC can override via environment: STUDENT_ID_PREFIX=AIEC
+# Existing stored IDs are never rewritten — this only affects new IDs.
+STUDENT_ID_PREFIX = os.getenv('STUDENT_ID_PREFIX', 'STU')
+
+# STUDENT_DEFAULT_CHECKLIST: default process steps created on enrollment.
+# Each item requires 'step_name' (str) and 'order' (int, 1-based).
+# This replaces the previous hardcoded DEFAULT_CHECKLIST_TEMPLATE in models.py.
+# The list is intentionally generic (study-abroad oriented) to match current
+# AIEC usage. Tenant-specific templates are a Phase 8 concern.
+STUDENT_DEFAULT_CHECKLIST = os.getenv('STUDENT_DEFAULT_CHECKLIST', None)  # Reserved for future env override
+if STUDENT_DEFAULT_CHECKLIST is None:
+    STUDENT_DEFAULT_CHECKLIST = [
+        {"step_name": "Document Collection",  "order": 1},
+        {"step_name": "University Application", "order": 2},
+        {"step_name": "Offer Letter",           "order": 3},
+        {"step_name": "Visa Application",       "order": 4},
+        {"step_name": "Visa Interview",         "order": 5},
+        {"step_name": "Visa Approval",          "order": 6},
+        {"step_name": "Pre-departure",          "order": 7},
+    ]
+
+# Consultancy display info — used in StudentPortal and notification templates.
+# Override these per-tenant via environment variables.
+CONSULTANCY_NAME    = os.getenv('CONSULTANCY_NAME', 'Aaradhya International Education Consultancy')
+CONSULTANCY_PHONE   = os.getenv('CONSULTANCY_PHONE', '+977 9802020575')
+CONSULTANCY_EMAIL   = os.getenv('CONSULTANCY_EMAIL', 'aaradhyainternationaleducation@gmail.com')
+CONSULTANCY_CITY    = os.getenv('CONSULTANCY_CITY', 'Birgunj, Nepal')
+
 # Email
 # Set EMAIL_BACKEND=console in .env for local development (prints to stdout, no real send)
 # Leave unset or set to smtp for production

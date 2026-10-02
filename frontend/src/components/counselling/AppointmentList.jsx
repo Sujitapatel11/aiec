@@ -37,7 +37,7 @@ const EMPTY_FORM = {
   assigned_to: '',
 }
 
-export default function AppointmentList({ leadId, appointments = [], staffUsers = [], onRefresh }) {
+export default function AppointmentList({ leadId, studentId, appointments = [], staffUsers = [], onRefresh }) {
   const [showForm, setShowForm]     = useState(false)
   const [form, setForm]             = useState(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
@@ -49,15 +49,17 @@ export default function AppointmentList({ leadId, appointments = [], staffUsers 
     setFormError('')
     setSubmitting(true)
     try {
-      await createAppointment({
-        lead: leadId,
+      const payload = {
         title: form.title.trim(),
         appointment_date: new Date(form.appointment_date).toISOString(),
         duration_minutes: Number(form.duration_minutes),
         location_mode: form.location_mode,
         notes: form.notes.trim(),
         assigned_to: form.assigned_to || undefined,
-      })
+      }
+      if (studentId) payload.student = studentId
+      else if (leadId) payload.lead = leadId
+      await createAppointment(payload)
       setForm(EMPTY_FORM)
       setShowForm(false)
       onRefresh()

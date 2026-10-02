@@ -1,19 +1,22 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getLeads, createLead, getLead, getDashboardStats, updateLead, adminLogout,
-  getStaffUsers, getLeadActivities, addLeadActivity,
+  getStaffUsers, addLeadActivity,
   getStudents, getStudentDetail, enrollStudent, deleteStudent,
+  updateStudentProfile, convertLeadToStudent,
   addProcessStep, updateProcessStep, deleteProcessStep, addStepPayment,
   getVideoTestimonials, uploadVideoTestimonial, updateVideoTestimonial, deleteVideoTestimonial,
   uploadStudentDocument, verifyStudentDocument, deleteStudentDocument,
-  resetStudentPassword
+  resetStudentPassword,
+  sendLeadWhatsApp,
 } from '../api'
 
 import LeadFilters from '../components/leads/LeadFilters'
 import LeadList from '../components/leads/LeadList'
 import LeadForm from '../components/leads/LeadForm'
 import LeadDetail from '../components/leads/LeadDetail'
+import StudentDetail from '../components/students/StudentDetail'
 
 /* ── Constants ─────────────────────────────────────────────────────── */
 const STATUS_OPTIONS = [
@@ -44,9 +47,7 @@ const STEP_STATUS_OPTIONS = [
   { value: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-800 border-blue-200' },
   { value: 'completed',   label: 'Completed',   color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
 ]
-
-const statusColor = (s) => STATUS_OPTIONS.find(o => o.value === s)?.color || 'bg-gray-100 text-gray-600'
-const statusLabel = (s) => STATUS_OPTIONS.find(o => o.value === s)?.label || s
+const STUDENT_PAGE_SIZE = 20
 
 const FLAGS = {
   Canada:'🇨🇦', Australia:'🇦🇺', 'United Kingdom':'🇬🇧', UK:'🇬🇧',
@@ -78,127 +79,12 @@ function StatCard({ icon, label, value, sub, accent }) {
   )
 }
 
-/* ── Lead detail drawer ────────────────────────────────────────────── */
-function LeadDrawer({ lead, onClose, onStatusChange }) {
-  if (!lead) return null
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-      <div
-        className="relative bg-white w-full max-w-md h-full overflow-y-auto shadow-2xl animate-fade-in"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="bg-gradient-to-br from-primary-700 to-primary-900 px-6 py-5 text-white">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-lg">Lead Details</h2>
-            <button onClick={onClose} className="text-white/70 hover:text-white p-1">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <p className="text-xl font-extrabold">{lead.name}</p>
-          <p className="text-blue-200 text-sm">{lead.email}</p>
-        </div>
-
-        <div className="p-6 space-y-5">
-          {/* Status */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Update Status</p>
-            <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => onStatusChange(lead.id, opt.value)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
-                    lead.status === opt.value
-                      ? opt.color + ' ring-2 ring-offset-1 ring-current'
-                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Contact */}
-          <Section title="Contact Info">
-            <Row label="Phone" value={lead.phone} />
-            <Row label="Country" value={lead.country_of_residence} />
-            <Row label="Source" value={lead.source} />
-          </Section>
-
-          {/* Academic */}
-          <Section title="Academic Profile">
-            <Row label="Qualification" value={lead.qualification} />
-            <Row label="GPA / Marks" value={lead.marks ? `${lead.marks}%` : null} />
-            <Row label="English Score" value={lead.english_score} />
-            <Row label="Budget" value={lead.budget ? `$${Number(lead.budget).toLocaleString()}` : null} />
-            <Row label="Course Interest" value={lead.course_interest} />
-          </Section>
-
-          {/* Recommendations */}
-          <Section title="AI Recommendations">
-            <Row label="Recommended Country" value={lead.recommended_country} />
-            <Row label="Recommended Course" value={lead.recommended_course} />
-          </Section>
-
-          {/* Questionnaire detail if available */}
-          {lead.questionnaire && (
-            <Section title="Questionnaire Submission">
-              <Row label="Education" value={lead.questionnaire.education_level} />
-              <Row label="Field" value={lead.questionnaire.field_of_interest} />
-              <Row label="Countries" value={lead.questionnaire.preferred_countries?.join(', ')} />
-              <Row label="Budget Range" value={lead.questionnaire.budget_range} />
-              <Row label="English" value={lead.questionnaire.english_proficiency} />
-              <Row label="Intake" value={lead.questionnaire.target_intake} />
-              {lead.questionnaire.additional_info && (
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="text-xs font-semibold text-gray-400 mb-1">Additional Notes</p>
-                  <p className="text-xs text-gray-700 bg-gray-50 p-2 rounded-lg">{lead.questionnaire.additional_info}</p>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {lead.notes && (
-            <Section title="Lead Notes">
-              <p className="text-xs text-gray-700 bg-gray-50 p-3 rounded-lg">{lead.notes}</p>
-            </Section>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Section({ title, children }) {
-  return (
-    <div className="bg-gray-50 rounded-xl p-4 space-y-2 border border-gray-100">
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{title}</p>
-      {children}
-    </div>
-  )
-}
-
-function Row({ label, value }) {
-  if (!value) return null
-  return (
-    <div className="flex justify-between items-center text-xs">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-semibold text-gray-800 font-mono">{value}</span>
-    </div>
-  )
-}
-
 /* ── Main Dashboard ────────────────────────────────────────────────── */
 export default function Dashboard() {
   const [activeTab, setActiveTab]         = useState('leads') // 'leads' | 'students'
   const [leads, setLeads]                 = useState([])
   const [stats, setStats]                 = useState(null)
   const [loading, setLoading]             = useState(true)
-  const [error, setError]                 = useState('')
 
   // Pagination & filter
   const [page, setPage]                   = useState(1)
@@ -217,19 +103,34 @@ export default function Dashboard() {
   // Students tab state
   const [students, setStudents]           = useState([])
   const [studentLoading, setStudentLoading] = useState(false)
+  const [studentError, setStudentError]   = useState('')
+  const [studentPage, setStudentPage]     = useState(1)
+  const [studentTotalPages, setStudentTotalPages] = useState(1)
+  const [studentTotalCount, setStudentTotalCount] = useState(0)
   const [studentSearch, setStudentSearch]   = useState('')
+  const [studentStatusFilter, setStudentStatusFilter] = useState('') // Phase 1.4
+  const studentRequestId = useRef(0)
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [enrollModal, setEnrollModal]     = useState(false)
   const [generatedPassword, setGeneratedPassword] = useState('')
   const [generatedStudentId, setGeneratedStudentId] = useState('')
   const [copied, setCopied]               = useState(false)
 
+  // Convert Lead → Student modal state (Phase 1.4)
+  const [convertModal, setConvertModal]   = useState(null) // holds lead object when open
+  const [convertForm, setConvertForm]     = useState({ username: '', destination_country: '', notes: '' })
+  const [convertError, setConvertError]   = useState('')
+  const [convertLoading, setConvertLoading] = useState(false)
+  const [convertResult, setConvertResult]   = useState(null) // holds response on success
+  const [convertCopied, setConvertCopied] = useState(false)
+  const convertRequestInFlight = useRef(false)
+
   // Custom step modal & payment modal
   const [stepModal, setStepModal]         = useState(false)
   const [paymentModalStep, setPaymentModalStep] = useState(null)
 
   // Form states
-  const [enrollForm, setEnrollForm]       = useState({ full_name: '', username: '', email: '', phone: '', destination_country: 'Canada', notes: '' })
+  const [enrollForm, setEnrollForm]       = useState({ full_name: '', username: '', email: '', phone: '', destination_country: '', notes: '' })
   const [enrollError, setEnrollError]     = useState('')
   const [stepForm, setStepForm]           = useState({ step_name: '', estimated_cost: 0, due_date: '', notes: '' })
   const [paymentForm, setPaymentForm]     = useState({ amount: '', notes: '' })
@@ -294,7 +195,6 @@ export default function Dashboard() {
 
   const fetchLeads = useCallback(async () => {
     setLoading(true)
-    setError('')
     try {
       const res = await getLeads(page, {
         status: statusFilter || undefined,
@@ -307,23 +207,41 @@ export default function Dashboard() {
       setTotalCount(data.count || (data.results || data).length)
       setTotalPages(Math.ceil((data.count || 1) / 10))
     } catch {
-      setError('Failed to fetch leads. Make sure you are logged in.')
+      // Lead list falls back to its existing empty/loading presentation.
     } finally {
       setLoading(false)
     }
   }, [page, statusFilter, search, countryFilter, courseFilter])
 
   const fetchStudents = useCallback(async () => {
+    const requestId = ++studentRequestId.current
     setStudentLoading(true)
+    setStudentError('')
     try {
-      const res = await getStudents()
-      setStudents(res.data)
-    } catch {
-      setError('Failed to load enrolled students.')
+      const params = { page: studentPage, page_size: STUDENT_PAGE_SIZE }
+      if (studentStatusFilter) params.status = studentStatusFilter
+      if (studentSearch)       params.search = studentSearch
+      const res = await getStudents(params)
+      const data = res.data
+      const results = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : [])
+      const responseCount = data?.count == null ? NaN : Number(data.count)
+      const count = Array.isArray(data) || !Number.isFinite(responseCount) ? results.length : responseCount
+      const totalPages = Array.isArray(data)
+        ? 1
+        : Math.max(1, Number(data?.total_pages) || Math.ceil(count / STUDENT_PAGE_SIZE))
+      if (requestId !== studentRequestId.current) return
+      setStudents(results)
+      setStudentTotalCount(count)
+      setStudentTotalPages(totalPages)
+      if (studentPage > totalPages) setStudentPage(totalPages)
+    } catch (err) {
+      if (requestId === studentRequestId.current) {
+        setStudentError(err.response?.data?.error || 'Failed to load enrolled students.')
+      }
     } finally {
-      setStudentLoading(false)
+      if (requestId === studentRequestId.current) setStudentLoading(false)
     }
-  }, [])
+  }, [studentPage, studentStatusFilter, studentSearch])
 
   // Video Testimonials tab state
   const [videoTestimonials, setVideoTestimonials]   = useState([])
@@ -398,6 +316,15 @@ export default function Dashboard() {
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to log activity.')
     }
+  }
+
+  // Phase A — real outbound WhatsApp dispatch
+  // Throws on failure so LeadActivityFeed can show its own inline error.
+  const handleSendWhatsApp = async (leadId, message) => {
+    const res = await sendLeadWhatsApp(leadId, message)
+    // Refresh lead detail so the new WhatsApp activity appears in the feed.
+    handleSelectLead({ id: leadId })
+    return res
   }
 
   useEffect(() => {
@@ -555,7 +482,7 @@ export default function Dashboard() {
     setEnrollModal(false)
     setGeneratedPassword('')
     setGeneratedStudentId('')
-    setEnrollForm({ full_name: '', username: '', email: '', phone: '', destination_country: 'Canada', notes: '' })
+    setEnrollForm({ full_name: '', username: '', email: '', phone: '', destination_country: '', notes: '' })
     setEnrollError('')
   }
 
@@ -567,6 +494,85 @@ export default function Dashboard() {
       fetchStudents()
     } catch {
       alert('Failed to refresh student record.')
+    }
+  }
+
+  // Phase 1.4 — update student lifecycle status
+  const handleUpdateStudentStatus = async (studentId, newStatus) => {
+    try {
+      await updateStudentProfile(studentId, { status: newStatus })
+      refreshStudentDetail(studentId)
+    } catch (err) {
+      alert(err.response?.data?.status?.[0] || err.response?.data?.error || 'Failed to update student status.')
+    }
+  }
+
+  // Phase 1.4 — open "Convert to Student" modal, pre-fill from lead
+  const handleOpenConvertModal = (lead) => {
+    if (!lead || lead.status === 'converted') return
+    setConvertError('')
+    setConvertResult(null)
+    setConvertCopied(false)
+    setConvertForm({
+      username: '',
+      destination_country: lead.recommended_country || lead.country_of_residence || '',
+      notes: '',
+    })
+    setConvertModal(lead)
+  }
+
+  const handleCloseConvertModal = () => {
+    if (convertRequestInFlight.current) return
+    setConvertModal(null)
+    setConvertForm({ username: '', destination_country: '', notes: '' })
+    setConvertError('')
+    setConvertResult(null)
+    setConvertLoading(false)
+    setConvertCopied(false)
+  }
+
+  const handleConvertSubmit = async (e) => {
+    e.preventDefault()
+    if (!convertModal || convertLoading || convertResult || convertRequestInFlight.current) return
+    convertRequestInFlight.current = true
+    setConvertError('')
+    setConvertLoading(true)
+    try {
+      const res = await convertLeadToStudent(convertModal.id, {
+        username:            convertForm.username.trim(),
+        destination_country: convertForm.destination_country.trim(),
+        notes:               convertForm.notes.trim(),
+      })
+      setConvertResult(res.data)
+      // Refresh lead detail and student list
+      await handleSelectLead({ id: convertModal.id })
+      fetchLeads()
+      fetchStats()
+      fetchStudents()
+    } catch (err) {
+      const data = err.response?.data
+      if (err.response?.status === 409) {
+        setConvertError(data?.error || 'This lead has already been converted to a student.')
+      } else {
+        const fieldError = data && typeof data === 'object'
+          ? Object.values(data).flat().find(value => typeof value === 'string')
+          : null
+        setConvertError(data?.error || fieldError || 'Conversion failed. Please check the inputs.')
+      }
+    } finally {
+      convertRequestInFlight.current = false
+      setConvertLoading(false)
+    }
+  }
+
+  const handleCopyConvertedPassword = async () => {
+    if (!convertResult?.generated_password) return
+    try {
+      await navigator.clipboard.writeText(convertResult.generated_password)
+      setConvertCopied(true)
+      setTimeout(() => setConvertCopied(false), 2000)
+    } catch {
+      setConvertError('Unable to copy the password. Select and copy it manually.')
     }
   }
 
@@ -714,14 +720,6 @@ export default function Dashboard() {
     }
   }
 
-  const filteredStudents = students.filter(s =>
-    s.full_name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.student_id?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.username?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.email?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.destination_country?.toLowerCase().includes(studentSearch.toLowerCase())
-  )
-
   return (
     <div className="min-h-screen bg-gray-50 selection:bg-amber-400 selection:text-slate-900 font-sans">
 
@@ -777,7 +775,7 @@ export default function Dashboard() {
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon="📥" label="Total Leads" value={stats.total_leads} accent="bg-blue-50 text-blue-600" />
-            <StatCard icon="🎓" label="Enrolled Students" value={students.length} accent="bg-emerald-50 text-emerald-600" />
+            <StatCard icon="🎓" label="Enrolled Students" value={studentTotalCount} accent="bg-emerald-50 text-emerald-600" />
             <StatCard icon="⚡" label="Visa Process" value={stats.status_breakdown?.visa_process || 0} accent="bg-amber-50 text-amber-600" />
             <StatCard icon="✅" label="Converted Students" value={stats.status_breakdown?.converted || 0} accent="bg-green-50 text-green-600" />
           </div>
@@ -803,7 +801,7 @@ export default function Dashboard() {
               }`}
             >
               <span>🎓 Enrolled Students</span>
-              <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold">{students.length}</span>
+              <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-bold">{studentTotalCount}</span>
             </button>
 
             <button
@@ -874,7 +872,9 @@ export default function Dashboard() {
               onAssignChange={handleAssignChange}
               onFollowUpChange={handleFollowUpChange}
               onAddActivity={handleAddActivity}
+              onSendWhatsApp={handleSendWhatsApp}
               onRefreshLead={handleSelectLead}
+              onConvertToStudent={handleOpenConvertModal}
               staffUsers={staffUsers}
               isAdmin={isAdmin}
               currentUserId={currentUserId}
@@ -888,21 +888,44 @@ export default function Dashboard() {
             <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="font-bold text-gray-900">Enrolled Students & Visa Process Tracking</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{filteredStudents.length} student records · Admin & Staff Access</p>
+                <p className="text-xs text-gray-400 mt-0.5">{studentTotalCount} student records · Admin & Staff Access</p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Status filter — Phase 1.4 */}
+                <select
+                  value={studentStatusFilter}
+                  onChange={e => { setStudentStatusFilter(e.target.value); setStudentPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-36"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="graduated">Graduated</option>
+                  <option value="withdrawn">Withdrawn</option>
+                  <option value="deferred">Deferred</option>
+                </select>
                 <input
                   type="text"
-                  placeholder="Filter student profiles..."
+                  placeholder="Search students..."
                   value={studentSearch}
-                  onChange={e => setStudentSearch(e.target.value)}
-                  className="input-field text-xs py-1.5 px-3 w-56"
+                  onChange={e => { setStudentSearch(e.target.value); setStudentPage(1) }}
+                  className="input-field text-xs py-1.5 px-3 w-48"
                 />
               </div>
             </div>
 
-            {studentLoading ? (
+            {studentError ? (
+              <div className="px-6 py-12 text-center" role="alert">
+                <p className="text-sm font-semibold text-red-700">{studentError}</p>
+                <button
+                  onClick={fetchStudents}
+                  className="mt-3 text-xs font-bold text-slate-800 underline underline-offset-2"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : studentLoading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -912,6 +935,7 @@ export default function Dashboard() {
                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                     <tr>
                       <th className="px-5 py-3 text-left">Student Profile</th>
+                      <th className="px-5 py-3 text-left">Status</th>
                       <th className="px-5 py-3 text-left">Phone / WhatsApp</th>
                       <th className="px-5 py-3 text-left">Destination</th>
                       <th className="px-5 py-3 text-left">Enrolled Date</th>
@@ -922,14 +946,16 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredStudents.length === 0 && (
+                    {students.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-16 text-center text-gray-400">
-                          No enrolled students found. Click "Enroll New Student" to get started.
+                        <td colSpan={9} className="px-6 py-16 text-center text-gray-400">
+                          {studentTotalCount === 0 && !studentSearch && !studentStatusFilter
+                            ? 'No enrolled students found. Click "Enroll New Student" to get started.'
+                            : 'No students match the selected filters.'}
                         </td>
                       </tr>
                     )}
-                    {filteredStudents.map(st => (
+                    {students.map(st => (
                       <tr
                         key={st.id}
                         onClick={() => setSelectedStudent(st)}
@@ -946,9 +972,22 @@ export default function Dashboard() {
                           </div>
                           <p className="text-xs text-gray-400">@{st.username} · {st.email}</p>
                         </td>
+                        {/* Phase 1.4 — student status badge */}
+                        <td className="px-5 py-3.5">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                            st.status === 'active'    ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                            st.status === 'on_hold'   ? 'bg-amber-100   text-amber-800   border-amber-200'   :
+                            st.status === 'graduated' ? 'bg-blue-100    text-blue-800    border-blue-200'    :
+                            st.status === 'withdrawn' ? 'bg-red-100     text-red-800     border-red-200'     :
+                            st.status === 'deferred'  ? 'bg-purple-100  text-purple-800  border-purple-200'  :
+                            'bg-gray-100 text-gray-600 border-gray-200'
+                          }`}>
+                            {st.status ? st.status.replace('_', ' ') : 'active'}
+                          </span>
+                        </td>
                         <td className="px-5 py-3.5 text-gray-600 font-mono text-xs">{st.phone}</td>
                         <td className="px-5 py-3.5">
-                          <span className="text-xs bg-navy-50 text-navy-800 font-bold px-2.5 py-1 rounded-full">
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
                             {flag(st.destination_country)}{st.destination_country}
                           </span>
                         </td>
@@ -961,7 +1000,7 @@ export default function Dashboard() {
                             onClick={() => setSelectedStudent(st)}
                             className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg transition-all"
                           >
-                            Checklist & Payments
+                            View Detail
                           </button>
                           {canResetStudentPassword(st) && (
                             <button
@@ -969,10 +1008,9 @@ export default function Dashboard() {
                               className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 transition-all"
                               title="Reset Student Password"
                             >
-                              🔑 Reset Password
+                              🔑
                             </button>
                           )}
-                          {/* DELETE ACTION IS VISIBLE ONLY FOR ADMIN */}
                           {isAdmin && (
                             <button
                               onClick={() => handleDeleteStudent(st.id)}
@@ -987,6 +1025,34 @@ export default function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {!studentError && !studentLoading && (
+              <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 text-xs">
+                <span className="text-gray-500">
+                  {studentTotalCount === 0
+                    ? '0 students'
+                    : `${(studentPage - 1) * STUDENT_PAGE_SIZE + 1}–${Math.min(studentPage * STUDENT_PAGE_SIZE, studentTotalCount)} of ${studentTotalCount}`}
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500">Page {studentPage} of {studentTotalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStudentPage(pageNumber => Math.max(1, pageNumber - 1))}
+                    disabled={studentPage <= 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg font-bold text-gray-700 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentPage(pageNumber => Math.min(studentTotalPages, pageNumber + 1))}
+                    disabled={studentPage >= studentTotalPages}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg font-bold text-gray-700 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1310,319 +1376,36 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── STUDENT DETAIL & CHECKLIST DRAWER ─────────────────────────── */}
+      {/* ── STUDENT DETAIL DRAWER (Phase 1.4 — extracted component) ── */}
       {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setSelectedStudent(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div
-            className="relative bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl animate-fade-in"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-slate-900 text-white px-6 py-6 border-b border-slate-800">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs bg-amber-400 text-slate-950 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-mono">
-                    Student ID: {selectedStudent.student_id || `#${selectedStudent.id}`}
-                  </span>
-                  {canResetStudentPassword(selectedStudent) && (
-                    <button
-                      onClick={() => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(selectedStudent) }}
-                      className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-full transition-all flex items-center gap-1 shadow-sm"
-                      title="Reset Student Password"
-                    >
-                      🔑 Reset Password
-                    </button>
-                  )}
-                </div>
-                <button onClick={() => setSelectedStudent(null)} className="text-white/70 hover:text-white text-lg font-bold">✕</button>
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-extrabold">{selectedStudent.full_name}</h2>
-                  <p className="text-slate-300 text-xs">@{selectedStudent.username} · {selectedStudent.email} · {selectedStudent.phone}</p>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-xs bg-white/10 border border-white/20 px-3 py-1 rounded-full font-bold">
-                    {flag(selectedStudent.destination_country)}{selectedStudent.destination_country}
-                  </span>
-                </div>
-              </div>
-
-              {/* Cost Summary Bar */}
-              <div className="grid grid-cols-3 gap-2 mt-5 bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Estimated Cost</p>
-                  <p className="text-sm font-extrabold text-white">${Number(selectedStudent.total_estimated_cost || 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Total Paid</p>
-                  <p className="text-sm font-extrabold text-emerald-400">${Number(selectedStudent.total_paid || 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Balance Due</p>
-                  <p className="text-sm font-extrabold text-amber-400">${Number(selectedStudent.pending_balance || 0).toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-
-              {/* Section Header */}
-              <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-slate-900 text-base">Visa Process Checklist & Payments</h3>
-                <button
-                  onClick={() => setStepModal(true)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-1.5 rounded-xl border border-slate-200 transition-all"
-                >
-                  ➕ Add Custom Step
-                </button>
-              </div>
-
-              {/* Checklist Steps */}
-              <div className="space-y-3">
-                {selectedStudent.process_steps?.map((st, idx) => (
-                  <div key={st.id} className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
-
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-800 text-xs font-extrabold flex items-center justify-center">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">{st.step_name}</p>
-                          <p className="text-xs text-slate-400">
-                            Est: ${Number(st.estimated_cost).toLocaleString()} · Paid: ${Number(st.total_paid).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {/* Status Select */}
-                        <select
-                          value={st.status}
-                          onChange={e => handleStepStatusChange(st.id, e.target.value)}
-                          className={`text-xs font-bold px-2.5 py-1 rounded-full border cursor-pointer ${
-                            STEP_STATUS_OPTIONS.find(o => o.value === st.status)?.color
-                          }`}
-                        >
-                          {STEP_STATUS_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-
-                        {/* Add Payment Button */}
-                        <button
-                          onClick={() => setPaymentModalStep(st)}
-                          className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg transition-all"
-                        >
-                          + Pay
-                        </button>
-
-                        {/* DELETE STEP (ADMIN ONLY) */}
-                        {isAdmin && (
-                          <button
-                            onClick={() => handleDeleteStep(st.id)}
-                            className="text-xs text-red-500 hover:text-red-700 p-1 font-bold"
-                            title="Delete Step (Admin Only)"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Step Notes or Payments List */}
-                    {st.payments?.length > 0 && (
-                      <div className="bg-white rounded-xl p-3 border border-slate-100 space-y-1.5 text-xs">
-                        <p className="font-bold text-slate-500 text-[10px] uppercase">Recorded Payments</p>
-                        {st.payments.map(p => (
-                          <div key={p.id} className="flex justify-between items-center text-slate-700">
-                            <span>${Number(p.amount).toLocaleString()} ({p.payment_date}) · <span className="text-slate-400">{p.recorded_by_name}</span></span>
-                            <span className="text-slate-500 italic">{p.notes}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                  </div>
-                ))}
-              </div>
-
-              {/* ── STUDENT DOCUMENTS SECTION ───────────────────────── */}
-              <div className="pt-6 border-t border-slate-200 space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                      <span>📄 Student Documents Compliance</span>
-                      <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
-                        {selectedStudent.documents?.length || 0} Documents
-                      </span>
-                    </h3>
-                    <p className="text-xs text-gray-500">Review uploaded documents, verify/reject status, or upload on student behalf</p>
-                  </div>
-                </div>
-
-                {/* Upload On-Behalf-Of Form */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                  <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    ➕ Upload Document on Behalf of Student
-                  </p>
-
-                  {staffDocError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-xl">
-                      ⚠️ {staffDocError}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleStaffDocUpload} className="grid sm:grid-cols-12 gap-3 items-end">
-                    <div className="sm:col-span-4">
-                      <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Document Type *</label>
-                      <select
-                        value={staffDocType}
-                        onChange={e => setStaffDocType(e.target.value)}
-                        className="input-field text-xs py-2 px-3"
-                      >
-                        <option value="Passport">Passport</option>
-                        <option value="10th Marksheet">10th Marksheet</option>
-                        <option value="12th Marksheet">12th Marksheet</option>
-                        <option value="IELTS/English Score">IELTS/English Score</option>
-                        <option value="Bank Statement">Bank Statement</option>
-                        <option value="Photo">Passport Photo</option>
-                        <option value="Other">Other Document</option>
-                      </select>
-                    </div>
-
-                    <div className="sm:col-span-5">
-                      <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Select File (PDF, JPG, PNG) *</label>
-                      <input
-                        id="staff-doc-file-input"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        required
-                        onChange={e => setStaffDocFile(e.target.files?.[0] || null)}
-                        className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white hover:file:bg-slate-800 cursor-pointer"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <button
-                        type="submit"
-                        disabled={staffDocUploading}
-                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
-                      >
-                        {staffDocUploading ? (
-                          <>
-                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>📤 Upload Doc</>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Uploaded Documents List */}
-                <div className="space-y-3">
-                  {!selectedStudent.documents || selectedStudent.documents.length === 0 ? (
-                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400">
-                      📄 No documents uploaded for this student yet. Use the form above to upload a scan or ask the student to upload via their portal.
-                    </div>
-                  ) : (
-                    selectedStudent.documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-slate-300 transition-all"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-slate-900 text-sm">{doc.document_type}</span>
-                            {/* Verification Status Badge */}
-                            {doc.verification_status === 'pending' ? (
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                                ⏳ Pending Review
-                              </span>
-                            ) : doc.verification_status === 'verified' ? (
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                ✅ Verified ({doc.verified_by_name})
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
-                                ❌ Rejected
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3 text-xs text-slate-500">
-                            <span className="font-mono text-[11px]">📎 {doc.file_name || 'Document'}</span>
-                            <span>· Uploaded by: <strong className="text-slate-700">{doc.uploaded_by_name}</strong></span>
-                            <span>· {new Date(doc.uploaded_at).toLocaleDateString()}</span>
-                          </div>
-
-                          {doc.verification_status === 'rejected' && doc.rejection_reason && (
-                            <p className="text-xs text-red-700 bg-red-50 p-2 rounded-xl border border-red-200 mt-1">
-                              ⚠️ <strong>Rejection Reason:</strong> {doc.rejection_reason}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 sm:self-center">
-                          <a
-                            href={doc.file_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-xl border border-slate-200 transition-all"
-                          >
-                            👁️ View
-                          </a>
-
-                          {/* Verify Button */}
-                          {doc.verification_status !== 'verified' && (
-                            <button
-                              onClick={() => handleVerifyDocument(doc.id, 'verified')}
-                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm"
-                            >
-                              ✅ Verify
-                            </button>
-                          )}
-
-                          {/* Reject Button */}
-                          {doc.verification_status !== 'rejected' && (
-                            <button
-                              onClick={() => setRejectModalDoc(doc)}
-                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-xl border border-amber-200 transition-all"
-                            >
-                              ❌ Reject
-                            </button>
-                          )}
-
-                          {/* DELETE BUTTON (ADMIN ONLY - strictly hidden for staff) */}
-                          {isAdmin && (
-                            <button
-                              onClick={() => handleDeleteDocument(doc.id)}
-                              className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1.5 rounded-xl border border-red-200 transition-all"
-                              title="Delete Document (Admin Only)"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
+        <StudentDetail
+          student={selectedStudent}
+          onClose={() => setSelectedStudent(null)}
+          onStepStatusChange={handleStepStatusChange}
+          onAddStep={() => setStepModal(true)}
+          onAddPayment={(step) => setPaymentModalStep(step)}
+          onDeleteStep={handleDeleteStep}
+          onVerifyDocument={handleVerifyDocument}
+          onRejectDocument={(doc) => setRejectModalDoc(doc)}
+          onDeleteDocument={handleDeleteDocument}
+          onStaffDocUpload={handleStaffDocUpload}
+          onResetPassword={(st) => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(st) }}
+          onDeleteStudent={handleDeleteStudent}
+          onUpdateStatus={handleUpdateStudentStatus}
+          onRefresh={() => refreshStudentDetail(selectedStudent.id)}
+          isAdmin={isAdmin}
+          canResetPassword={canResetStudentPassword(selectedStudent)}
+          staffDocType={staffDocType}
+          setStaffDocType={setStaffDocType}
+          staffDocFile={staffDocFile}
+          setStaffDocFile={setStaffDocFile}
+          staffDocUploading={staffDocUploading}
+          staffDocError={staffDocError}
+          stepStatusOptions={STEP_STATUS_OPTIONS}
+          flag={flag}
+          staffUsers={staffUsers}
+        />
       )}
-
       {/* ── ADD LEAD MODAL ─────────────────────────────────────────────── */}
       {leadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -1723,6 +1506,130 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {convertModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100">
+            <div className="bg-slate-900 px-6 py-5 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-lg">
+                  {convertResult ? 'Student Created' : 'Convert Lead to Student'}
+                </h3>
+                <p className="text-blue-200 text-xs">{convertModal.name} · {convertModal.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseConvertModal}
+                disabled={convertLoading}
+                className="text-white/70 hover:text-white text-lg font-bold disabled:opacity-40"
+                aria-label="Close conversion dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            {convertResult ? (
+              <div className="p-6 space-y-4 text-center">
+                <p className="text-sm font-bold text-emerald-700">Lead converted successfully.</p>
+                {convertError && <p role="alert" className="text-xs text-red-700">{convertError}</p>}
+                {convertResult.student_id && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    <p className="text-[10px] font-extrabold uppercase text-emerald-800">Student ID</p>
+                    <p className="font-mono font-black text-lg text-emerald-950">{convertResult.student_id}</p>
+                  </div>
+                )}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                  <p className="text-[11px] font-bold uppercase text-amber-800">One-time password</p>
+                  <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <code className="font-mono font-bold text-slate-900 bg-white px-3 py-2 rounded-lg border border-amber-200 break-all">
+                      {convertResult.generated_password}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyConvertedPassword}
+                      className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs px-3 py-2 rounded-lg"
+                    >
+                      {convertCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-amber-800">This password is shown once. Share it securely with the student.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseConvertModal}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleConvertSubmit} className="p-6 space-y-4">
+                {convertError && (
+                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded-xl">
+                    {convertError}
+                  </div>
+                )}
+                <label className="block text-[11px] font-bold text-gray-600 uppercase">
+                  Student username *
+                  <input
+                    type="text"
+                    required
+                    autoComplete="off"
+                    value={convertForm.username}
+                    onChange={event => {
+                      setConvertForm(form => ({ ...form, username: event.target.value }))
+                      setConvertError('')
+                    }}
+                    className="input-field text-sm mt-1 normal-case font-normal"
+                  />
+                </label>
+                <label className="block text-[11px] font-bold text-gray-600 uppercase">
+                  Destination country *
+                  <input
+                    type="text"
+                    required
+                    value={convertForm.destination_country}
+                    onChange={event => {
+                      setConvertForm(form => ({ ...form, destination_country: event.target.value }))
+                      setConvertError('')
+                    }}
+                    className="input-field text-sm mt-1 normal-case font-normal"
+                  />
+                </label>
+                <label className="block text-[11px] font-bold text-gray-600 uppercase">
+                  Notes
+                  <textarea
+                    rows={3}
+                    value={convertForm.notes}
+                    onChange={event => {
+                      setConvertForm(form => ({ ...form, notes: event.target.value }))
+                      setConvertError('')
+                    }}
+                    className="input-field text-sm mt-1 normal-case font-normal resize-none"
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseConvertModal}
+                    disabled={convertLoading}
+                    className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={convertLoading}
+                    className="w-1/2 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl disabled:opacity-50"
+                  >
+                    {convertLoading ? 'Converting…' : 'Convert to Student'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -34,6 +34,13 @@ const STEP_STATUS_BADGES = {
   completed:   { label: 'Completed',   color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: '✅' },
 }
 
+const CONSULTANCY_NAME = import.meta.env.VITE_CONSULTANCY_NAME || 'Aaradhya International Education Consultancy'
+const CONSULTANCY_SHORT_NAME = import.meta.env.VITE_CONSULTANCY_SHORT_NAME || 'Aaradhya International'
+const CONSULTANCY_LOGO = import.meta.env.VITE_CONSULTANCY_LOGO || '/logo.png'
+const CONSULTANCY_CITY = import.meta.env.VITE_CONSULTANCY_CITY || 'Birgunj, Nepal'
+const CONSULTANCY_PHONE = import.meta.env.VITE_CONSULTANCY_PHONE || '+977 9802020575'
+const CONSULTANCY_EMAIL = import.meta.env.VITE_CONSULTANCY_EMAIL || 'aaradhyainternationaleducation@gmail.com'
+
 export default function StudentPortal() {
   const navigate = useNavigate()
   const token = localStorage.getItem('aiec_token')
@@ -92,7 +99,7 @@ export default function StudentPortal() {
         const res = await getStudentPortalMe()
         setProfile(res.data)
       } catch (err) {
-        setError(err.response?.data?.error || 'Unable to load student profile. Please contact AIEC support.')
+        setError(err.response?.data?.error || `Unable to load student profile. Please contact ${CONSULTANCY_NAME} support.`)
       } finally {
         setLoading(false)
       }
@@ -126,11 +133,11 @@ export default function StudentPortal() {
       <header className="max-w-5xl mx-auto w-full px-4 py-4 flex items-center justify-between border-b border-white/10">
         <div className="flex items-center gap-3">
           <div className="bg-white rounded-2xl p-1.5 shadow-lg border border-amber-400/30">
-            <img src="/logo.png" alt="AIEC Logo" className="h-9 w-auto object-contain" />
+            <img src={CONSULTANCY_LOGO} alt={`${CONSULTANCY_NAME} logo`} className="h-9 w-auto object-contain" />
           </div>
           <div>
             <h1 className="font-extrabold text-sm sm:text-base tracking-tight leading-tight text-white">
-              Aaradhya International
+              {CONSULTANCY_SHORT_NAME}
             </h1>
             <p className="text-amber-400 text-xs font-semibold">
               Student Portal
@@ -393,7 +400,7 @@ export default function StudentPortal() {
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
                   <h3 className="text-xl font-extrabold text-white">Application & Visa Process Checklist</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Real-time status updates tracked by your AIEC counselor</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Real-time status updates tracked by your counselor</p>
                 </div>
 
                 <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full font-bold">
@@ -457,12 +464,12 @@ export default function StudentPortal() {
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-xs text-gray-300 space-y-3">
               <h3 className="font-bold text-white text-sm">Have Questions About Your Application?</h3>
               <p className="text-gray-400">
-                Your educational counselor at AIEC is monitoring your process steps daily. If you need to submit new documents or ask questions about fees, contact our team:
+                Your educational counselor is monitoring your process steps daily. If you need to submit new documents or ask questions about fees, contact your support team:
               </p>
               <div className="flex flex-wrap gap-4 text-amber-300 font-semibold pt-1">
-                <span>📍 Birgunj, Nepal</span>
-                <span>📞 +977 9802020575</span>
-                <span>📧 aaradhyainternationaleducation@gmail.com</span>
+                <span>📍 {CONSULTANCY_CITY}</span>
+                <span>📞 {CONSULTANCY_PHONE}</span>
+                <span>📧 {CONSULTANCY_EMAIL}</span>
               </div>
             </div>
           </>
@@ -472,7 +479,7 @@ export default function StudentPortal() {
 
       {/* Footer */}
       <footer className="max-w-5xl mx-auto w-full text-center py-4 border-t border-white/10 text-xs text-gray-500">
-        © {new Date().getFullYear()} Aaradhya International Education Consultancy. All rights reserved.
+        © {new Date().getFullYear()} {CONSULTANCY_NAME}. All rights reserved.
       </footer>
 
     </div>

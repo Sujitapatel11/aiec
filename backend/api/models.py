@@ -1,15 +1,37 @@
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.conf import settings
 
+
+def _get_default_checklist():
+    """
+    Return the active checklist template from settings.
+    Falls back to a safe 7-step study-abroad default if settings is not
+    configured — this keeps models.py importable even in testing contexts
+    before settings are fully loaded.
+    """
+    return getattr(settings, 'STUDENT_DEFAULT_CHECKLIST', [
+        {"step_name": "Document Collection",   "order": 1},
+        {"step_name": "University Application", "order": 2},
+        {"step_name": "Offer Letter",           "order": 3},
+        {"step_name": "Visa Application",       "order": 4},
+        {"step_name": "Visa Interview",         "order": 5},
+        {"step_name": "Visa Approval",          "order": 6},
+        {"step_name": "Pre-departure",          "order": 7},
+    ])
+
+
+# Legacy module-level alias kept for any external code that imports it directly.
+# New code should call _get_default_checklist() or use settings.STUDENT_DEFAULT_CHECKLIST.
 DEFAULT_CHECKLIST_TEMPLATE = [
-    {"step_name": "Document Collection", "order": 1},
+    {"step_name": "Document Collection",   "order": 1},
     {"step_name": "University Application", "order": 2},
-    {"step_name": "Offer Letter", "order": 3},
-    {"step_name": "Visa Application", "order": 4},
-    {"step_name": "Visa Interview", "order": 5},
-    {"step_name": "Visa Approval", "order": 6},
-    {"step_name": "Pre-departure", "order": 7},
+    {"step_name": "Offer Letter",           "order": 3},
+    {"step_name": "Visa Application",       "order": 4},
+    {"step_name": "Visa Interview",         "order": 5},
+    {"step_name": "Visa Approval",          "order": 6},
+    {"step_name": "Pre-departure",          "order": 7},
 ]
 
 
@@ -156,16 +178,36 @@ class StudentIdSequence(models.Model):
 
 
 def generate_student_id(year=None):
+    """
+    Generate a unique, sequential student ID for the given year.
+
+    Format:  <PREFIX>-<YEAR>-<NNNN>
+    Example: STU-2026-0001
+
+    The prefix is read from settings.STUDENT_ID_PREFIX (default 'STU').
+    Existing stored IDs are never rewritten — this only applies to new records.
+    The sequence is per-year and uses a SELECT FOR UPDATE to be atomic under
+    concurrent enrollment requests.
+    """
     if year is None:
         year = timezone.now().year
+    prefix = getattr(settings, 'STUDENT_ID_PREFIX', 'STU')
     with transaction.atomic():
         seq, _ = StudentIdSequence.objects.select_for_update().get_or_create(year=year)
         seq.last_number += 1
         seq.save()
-        return f"AIEC-{seq.year}-{seq.last_number:04d}"
+        return f"{prefix}-{seq.year}-{seq.last_number:04d}"
 
 
 class StudentProfile(models.Model):
+    STUDENT_STATUS_CHOICES = [
+        ('active',    'Active'),
+        ('on_hold',   'On Hold'),
+        ('graduated', 'Graduated'),
+        ('withdrawn', 'Withdrawn'),
+        ('deferred',  'Deferred'),
+    ]
+
     student_id = models.CharField(max_length=50, unique=True, null=True, blank=True, db_index=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
     full_name = models.CharField(max_length=200)
@@ -174,6 +216,24 @@ class StudentProfile(models.Model):
     enrollment_date = models.DateField(auto_now_add=True)
     enrolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='enrolled_students')
     notes = models.TextField(blank=True)
+
+    # Phase 1.4 — lifecycle status
+    status = models.CharField(
+        max_length=20,
+        choices=STUDENT_STATUS_CHOICES,
+        default='active',
+        db_index=True,
+    )
+
+    # Phase 1.4 — traceability back to originating Lead (nullable; existing students have no lead)
+    lead = models.ForeignKey(
+        'Lead',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -188,6 +248,13 @@ class StudentProfile(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['lead'],
+                condition=models.Q(lead__isnull=False),
+                name='unique_student_profile_lead',
+            ),
+        ]
 
 
 

@@ -36,7 +36,9 @@ export default function LeadDetail({
   onAssignChange,
   onFollowUpChange,
   onAddActivity,
+  onSendWhatsApp,      // Phase A: (message) => Promise — dispatches real WhatsApp via backend
   onRefreshLead,       // Phase 1.3: called after counselling mutations to reload lead detail
+  onConvertToStudent,
   staffUsers = [],
   isAdmin = false,
   currentUserId = 0,
@@ -230,6 +232,18 @@ export default function LeadDetail({
                 </div>
               </div>
 
+              {lead.status !== 'converted' && onConvertToStudent && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onConvertToStudent(lead)}
+                    className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors"
+                  >
+                    Convert to Student
+                  </button>
+                </div>
+              )}
+
               {/* Contact Details */}
               <Section title="Contact Information">
                 <Row label="Full Name"           value={lead.name} />
@@ -279,6 +293,12 @@ export default function LeadDetail({
             <LeadActivityFeed
               activities={lead.activities || []}
               onAddActivity={(data) => onAddActivity(lead.id, data)}
+              onSendWhatsApp={async (message) => {
+                // Dispatch the real WhatsApp send, then refresh activity list
+                // so the new WhatsApp entry appears immediately.
+                await onSendWhatsApp(lead.id, message)
+                if (onRefreshLead) onRefreshLead(lead.id)
+              }}
             />
           )}
 

@@ -12,7 +12,8 @@ import re
 
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
-    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument, DEFAULT_CHECKLIST_TEMPLATE,
+    StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
+    DEFAULT_CHECKLIST_TEMPLATE, _get_default_checklist,
     CounsellingNote, FollowUp, Task, Appointment
 )
 from .serializers import (
@@ -20,7 +21,8 @@ from .serializers import (
     QuestionnaireSerializer, QuestionnaireCreateSerializer,
     CountrySerializer, CourseSerializer,
     ProfileRecommendationSerializer, LeadCaptureSerializer,
-    StudentProfileSerializer, StudentEnrollmentSerializer,
+    StudentProfileSerializer, StudentPortalProfileSerializer,
+    StudentProfileUpdateSerializer, StudentEnrollmentSerializer,
     ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer,
     CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer
 )
@@ -33,7 +35,7 @@ from .ai_service import get_ai_recommendations
 from .recommendation_service import get_profile_recommendation
 from .chat_service import get_chat_response
 from .notify import send_lead_notification
-from .whatsapp_service import send_step_completion_whatsapp
+from .whatsapp_service import send_step_completion_whatsapp, send_whatsapp_to_lead
 from django.contrib.auth.models import User, Group
 import threading
 import re
@@ -250,6 +252,131 @@ class LeadViewSet(viewsets.ModelViewSet):
             content=content
         )
         return Response(LeadActivitySerializer(activity).data, status=status.HTTP_201_CREATED)
+
+    # ── Phase A: Outbound WhatsApp from Lead Detail ────────────────────
+
+    # In-memory per-process send tracker for lightweight abuse prevention.
+    # Maps (user_id, lead_id) → [timestamp, ...] of recent sends.
+    # This resets on every process restart (Render spins up fresh processes).
+    # It is not shared across multiple workers — document that Redis-backed
+    # throttling is the correct Phase B upgrade path.
+    _wa_send_log: dict = {}
+    _WA_WINDOW_SECONDS = 60    # sliding window
+    _WA_MAX_PER_WINDOW = 5     # max sends per user per lead per window
+
+    @action(detail=True, methods=['post'], url_path='send-whatsapp')
+    def send_whatsapp(self, request, pk=None):
+        """
+        POST /api/leads/<pk>/send-whatsapp/
+
+        Send an outbound WhatsApp message from the AIEC Business number to the
+        lead's registered phone number.
+
+        Authorization: Admin or Staff only (enforced by LeadViewSet.initial()).
+        The recipient phone number is always retrieved server-side from the Lead
+        record — the client MUST NOT supply it.
+
+        Request body:
+            { "message": "<string, max 1000 chars>" }
+
+        Returns:
+            201  { "sent": true,  "activity_id": <int>, "message": "..." }
+            400  { "error": "..." }   — validation failure / phone issue
+            503  { "error": "..." }   — Twilio/config failure
+        """
+        import time
+
+        lead = self.get_object()   # Raises 404 if not found; DRF handles 403
+
+        # ── 1. Message validation ──────────────────────────────────────
+        from .whatsapp_service import WHATSAPP_MAX_MESSAGE_LENGTH
+
+        raw_message = request.data.get('message', None)
+        if raw_message is None:
+            return Response(
+                {'error': 'message is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(raw_message, str):
+            return Response(
+                {'error': 'message must be a string.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        message = raw_message.strip()
+        if not message:
+            return Response(
+                {'error': 'message must not be empty or whitespace only.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(message) > WHATSAPP_MAX_MESSAGE_LENGTH:
+            return Response(
+                {'error': f'message exceeds maximum length of {WHATSAPP_MAX_MESSAGE_LENGTH} characters.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ── 2. Lead must have a phone number ──────────────────────────
+        if not lead.phone or not lead.phone.strip():
+            return Response(
+                {'error': 'This lead does not have a phone number on record. '
+                          'Please update the lead profile before sending a WhatsApp message.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ── 3. Lightweight in-process rate limiting ────────────────────
+        now = time.time()
+        key = (request.user.id, lead.id)
+        window = self.__class__._WA_WINDOW_SECONDS
+        max_sends = self.__class__._WA_MAX_PER_WINDOW
+        log = self.__class__._wa_send_log
+        # Prune timestamps outside the window
+        log[key] = [t for t in log.get(key, []) if now - t < window]
+        if len(log[key]) >= max_sends:
+            return Response(
+                {'error': f'Too many WhatsApp messages sent in the last {window} seconds. '
+                          f'Maximum is {max_sends} per {window}s per lead. Please wait before retrying.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
+        # ── 4. Dispatch via WhatsApp service ──────────────────────────
+        sender_name = request.user.get_full_name() or request.user.username
+        result = send_whatsapp_to_lead(
+            lead_phone=lead.phone,
+            message=message,
+            sender_name=sender_name,
+        )
+
+        # ── 5. Handle result ──────────────────────────────────────────
+        if not result['sent']:
+            # Safe user-facing error — no Twilio credentials or internal details
+            return Response(
+                {'error': result.get('error', 'WhatsApp message could not be sent.')},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # ── 6. Record in rate-limit tracker ──────────────────────────
+        log[key].append(now)
+
+        # ── 7. Log to LeadActivity ─────────────────────────────────────
+        # Distinguish real dispatched messages from manual journal entries by
+        # prefixing with "[Sent via AIEC WhatsApp]".
+        sid_note = f" (SID: {result['sid']})" if result.get('sid') else ""
+        activity_content = f"[Sent via AIEC WhatsApp]{sid_note}\n{message}"
+
+        activity = LeadActivity.objects.create(
+            lead=lead,
+            author=request.user,
+            activity_type='whatsapp',
+            content=activity_content,
+        )
+
+        return Response(
+            {
+                'sent': True,
+                'activity_id': activity.id,
+                'message': 'WhatsApp message sent successfully.',
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 
 # ── CRM Counselling, Follow-ups, Tasks & Appointments ViewSets ────────────
@@ -945,6 +1072,42 @@ def manage_user_detail(request, user_id):
 
 # ── Student Enrollment & Process Tracking Views ────────────────────────────
 
+def _create_student_enrollment(data, enrolled_by, lead=None):
+    generated_password = secrets.token_urlsafe(8) + "!"
+    name_parts = data['full_name'].split(maxsplit=1)
+    user = User.objects.create_user(
+        username=data['username'],
+        email=data['email'],
+        password=generated_password,
+        first_name=name_parts[0] if name_parts else '',
+        last_name=name_parts[1] if len(name_parts) > 1 else '',
+        is_staff=False,
+        is_superuser=False,
+        is_active=True,
+    )
+    student_group, _ = Group.objects.get_or_create(name='Student')
+    user.groups.add(student_group)
+
+    profile = StudentProfile.objects.create(
+        user=user,
+        full_name=data['full_name'],
+        phone=data['phone'],
+        destination_country=data['destination_country'],
+        enrolled_by=enrolled_by,
+        notes=data.get('notes', ''),
+        lead=lead,
+    )
+    for item in _get_default_checklist():
+        ProcessStep.objects.create(
+            student=profile,
+            step_name=item['step_name'],
+            status='pending',
+            estimated_cost=0.00,
+            order=item['order'],
+        )
+    return user, profile, generated_password
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def enroll_student(request):
@@ -963,42 +1126,9 @@ def enroll_student(request):
 
     data = serializer.validated_data
 
-    # Generate secure random password
-    generated_password = secrets.token_urlsafe(8) + "!"
-
-    # Create User with Student role
-    user = User.objects.create_user(
-        username=data['username'],
-        email=data['email'],
-        password=generated_password,
-        first_name=data['full_name'].split()[0] if data['full_name'] else '',
-        last_name=' '.join(data['full_name'].split()[1:]) if len(data['full_name'].split()) > 1 else '',
-        is_staff=False,
-        is_superuser=False,
-        is_active=True
-    )
-    student_group, _ = Group.objects.get_or_create(name='Student')
-    user.groups.add(student_group)
-
-    # Create StudentProfile
-    profile = StudentProfile.objects.create(
-        user=user,
-        full_name=data['full_name'],
-        phone=data['phone'],
-        destination_country=data['destination_country'],
-        enrolled_by=request.user,
-        notes=data.get('notes', '')
-    )
-
-    # Auto-create default checklist steps
-    for item in DEFAULT_CHECKLIST_TEMPLATE:
-        ProcessStep.objects.create(
-            student=profile,
-            step_name=item['step_name'],
-            status='pending',
-            estimated_cost=0.00,
-            order=item['order']
-        )
+    from django.db import transaction
+    with transaction.atomic():
+        user, profile, generated_password = _create_student_enrollment(data, request.user)
 
     # Return profile data + generated password ONCE (never logged in plaintext)
     return Response({
@@ -1018,32 +1148,109 @@ def enroll_student(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def manage_students(request):
-    """List all enrolled students. Accessible to Admin + Staff."""
+    """
+    List enrolled students.  Admin + Staff only.
+
+    Query parameters (all optional):
+        search              — substring match on full_name, student_id, username, email, phone
+        status              — exact match on StudentProfile.status
+        destination_country — case-insensitive contains match
+        enrolled_by         — filter by enrolled_by user ID (integer)
+        page                — 1-based page number (default 1)
+        page_size           — results per page (default 20, max 100)
+    """
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
-    students = StudentProfile.objects.prefetch_related('process_steps__payments', 'user', 'enrolled_by').all().order_by('-created_at')
-    serializer = StudentProfileSerializer(students, many=True)
-    return Response(serializer.data)
+    qs = StudentProfile.objects.prefetch_related(
+        'process_steps__payments', 'documents', 'counselling_notes',
+        'follow_ups', 'tasks', 'appointments',
+    ).select_related('user', 'enrolled_by', 'lead').order_by('-created_at')
+
+    # ── Filters ────────────────────────────────────────────────────────
+    search = request.query_params.get('search', '').strip()
+    if search:
+        qs = qs.filter(
+            Q(full_name__icontains=search)
+            | Q(student_id__icontains=search)
+            | Q(user__username__icontains=search)
+            | Q(user__email__icontains=search)
+            | Q(phone__icontains=search)
+            | Q(destination_country__icontains=search)
+        )
+
+    status_filter = request.query_params.get('status', '').strip()
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    country_filter = request.query_params.get('destination_country', '').strip()
+    if country_filter:
+        qs = qs.filter(destination_country__icontains=country_filter)
+
+    enrolled_by_filter = request.query_params.get('enrolled_by', '').strip()
+    if enrolled_by_filter and enrolled_by_filter.isdigit():
+        qs = qs.filter(enrolled_by_id=int(enrolled_by_filter))
+
+    # ── Pagination ─────────────────────────────────────────────────────
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = min(100, max(1, int(request.query_params.get('page_size', 20))))
+    except (ValueError, TypeError):
+        page_size = 20
+
+    total_count = qs.count()
+    total_pages = max(1, (total_count + page_size - 1) // page_size)
+    offset = (page - 1) * page_size
+    qs = qs[offset: offset + page_size]
+
+    serializer = StudentProfileSerializer(qs, many=True)
+    return Response({
+        'count': total_count,
+        'total_pages': total_pages,
+        'page': page,
+        'page_size': page_size,
+        'results': serializer.data,
+    })
 
 
-@api_view(['GET', 'DELETE'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def manage_student_detail(request, pk):
     """
-    Get student detail (Admin + Staff) or Delete student record (Admin ONLY).
+    GET    — retrieve full student record (Admin + Staff)
+    PATCH  — update mutable profile fields (Admin + Staff)
+    DELETE — hard delete student + user account (Admin ONLY)
+
+    PATCH accepts: full_name, phone, destination_country, notes, status
+    Immutable fields (student_id, user, enrollment_date, enrolled_by) are
+    intentionally excluded from the update serializer.
     """
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
-        student = StudentProfile.objects.get(pk=pk)
+        student = StudentProfile.objects.select_related(
+            'user', 'enrolled_by', 'lead'
+        ).prefetch_related(
+            'counselling_notes', 'follow_ups', 'tasks', 'appointments'
+        ).get(pk=pk)
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
         serializer = StudentProfileSerializer(student)
         return Response(serializer.data)
+
+    if request.method == 'PATCH':
+        serializer = StudentProfileUpdateSerializer(student, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        # Return full profile (with steps, documents, totals) after update
+        return Response(StudentProfileSerializer(student).data)
 
     if request.method == 'DELETE':
         # DELETE IS ADMIN ONLY (least-privilege rule)
@@ -1055,6 +1262,126 @@ def manage_student_detail(request, pk):
         if user:
             user.delete()
         return Response({'message': 'Student record deleted successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def convert_lead_to_student(request, lead_id):
+    """
+    POST /api/leads/<lead_id>/convert-to-student/
+
+    Converts a CRM Lead into an enrolled Student.
+
+    This endpoint orchestrates the following atomically:
+      1. Validates the lead exists and has not already been converted.
+      2. Pre-fills student data from the lead record.
+      3. Creates a Django User with Student role.
+      4. Creates a StudentProfile linked back to this lead.
+      5. Creates default ProcessStep rows via the settings-driven checklist.
+      6. Sets Lead.status = 'converted'.
+      7. Logs a LeadActivity entry.
+
+    The caller may supply overrides in the request body:
+        username           (required — must be unique)
+        email              (optional — defaults to lead.email)
+        full_name          (optional — defaults to lead.name)
+        phone              (optional — defaults to lead.phone)
+        destination_country (optional — defaults to lead.recommended_country or lead.country_of_residence)
+        notes              (optional — blank by default)
+
+    Returns the same payload shape as enroll_student (including generated_password
+    shown ONCE — never logged).
+
+    Authorization: Admin or Staff only.
+    """
+    from django.db import IntegrityError, transaction
+
+    is_staff_or_admin = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    )
+    if not is_staff_or_admin:
+        return Response(
+            {'error': 'Admin or Staff permissions required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        lead = Lead.objects.get(pk=lead_id)
+    except Lead.DoesNotExist:
+        return Response({'error': 'Lead not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        with transaction.atomic():
+            lead = Lead.objects.select_for_update().get(pk=lead_id)
+            existing_student = StudentProfile.objects.filter(lead=lead).first()
+            if lead.status == 'converted' or existing_student:
+                return Response(
+                    {'error': 'This lead has already been converted to a student.'},
+                    status=status.HTTP_409_CONFLICT
+                )
+
+            invalid_fields = {
+                field: ['Must be a string.']
+                for field in ('username', 'full_name', 'email', 'phone', 'destination_country', 'notes')
+                if field in request.data and request.data[field] is not None
+                and not isinstance(request.data[field], str)
+            }
+            if invalid_fields:
+                return Response(invalid_fields, status=status.HTTP_400_BAD_REQUEST)
+
+            data = {
+                'username': request.data.get('username'),
+                'full_name': request.data.get('full_name') or lead.name,
+                'email': request.data.get('email') or lead.email,
+                'phone': request.data.get('phone') or lead.phone,
+                'destination_country': (
+                    request.data.get('destination_country')
+                    or lead.recommended_country
+                    or lead.country_of_residence
+                ),
+                'notes': request.data.get('notes', ''),
+            }
+            serializer = StudentEnrollmentSerializer(data=data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            user, profile, generated_password = _create_student_enrollment(
+                serializer.validated_data, request.user, lead=lead
+            )
+            lead.status = 'converted'
+            lead.save(update_fields=['status', 'updated_at'])
+
+            actor_name = request.user.get_full_name() or request.user.username
+            LeadActivity.objects.create(
+                lead=lead,
+                author=request.user,
+                activity_type='status_change',
+                content=(
+                    f"Lead converted to student by {actor_name}. "
+                    f"Student profile: {profile.full_name} "
+                    f"(ID: {profile.student_id}, Username: {user.username})"
+                ),
+            )
+    except Lead.DoesNotExist:
+        return Response({'error': 'Lead not found.'}, status=status.HTTP_404_NOT_FOUND)
+    except IntegrityError:
+        return Response(
+            {'error': 'This lead or account has already been converted or created.'},
+            status=status.HTTP_409_CONFLICT
+        )
+
+    # generated_password is returned ONCE — never logged in plaintext
+    return Response(
+        {
+            'id':                 profile.id,
+            'student_id':         profile.student_id,
+            'generated_password': generated_password,
+            'message':            'Lead converted to student successfully.',
+        },
+        status=status.HTTP_201_CREATED
+    )
 
 
 @api_view(['POST'])
@@ -1205,7 +1532,7 @@ def student_portal_me(request):
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student profile not found for current user.'}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = StudentProfileSerializer(profile)
+    serializer = StudentPortalProfileSerializer(profile)
     return Response(serializer.data)
 
 
