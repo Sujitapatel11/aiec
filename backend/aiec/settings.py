@@ -60,7 +60,7 @@ WSGI_APPLICATION = 'aiec.wsgi.application'
 
 import sys
 
-_db_url = os.getenv('DATABASE_URL', '')
+_db_url = os.getenv('DATABASE_URL', '').strip()
 if 'test' in sys.argv:
     DATABASES = {
         'default': {
@@ -70,24 +70,32 @@ if 'test' in sys.argv:
     }
 elif _db_url:
     import dj_database_url
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=_db_url,
-            conn_max_age=600,
-            ssl_require=True,
-        )
-    }
+    if _db_url.startswith('sqlite'):
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=_db_url,
+                conn_max_age=0,
+                ssl_require=False,
+            )
+        }
+        if str(DATABASES['default']['NAME']) in ('db.sqlite3', ':memory:'):
+            DATABASES['default']['NAME'] = BASE_DIR / 'db.sqlite3'
+    else:
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=_db_url,
+                conn_max_age=600,
+                ssl_require=True,
+            )
+        }
 else:
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'aiec_db'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
