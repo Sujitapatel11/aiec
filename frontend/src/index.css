@@ -5,6 +5,8 @@
 
 @layer base {
   html { scroll-behavior: smooth; }
+  /* Prevent content from ever being wider than the viewport on mobile */
+  html, body { max-width: 100%; }
   body { @apply font-sans text-slate-800 bg-slate-50/50 antialiased selection:bg-navy-500 selection:text-white; }
   h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; @apply tracking-tight; }
   * { -webkit-font-smoothing: antialiased; }
@@ -93,4 +95,10 @@
   .option-card.selected {
     @apply border-navy-600 bg-navy-50/80 shadow-sm;
   }
+}
+
+@layer utilities {
+  /* Hide scrollbar while allowing scrolling (used on tab bars) */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }

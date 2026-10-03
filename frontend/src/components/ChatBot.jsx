@@ -446,7 +446,7 @@ export default function ChatBot() {
     <>
       {/* Floating button */}
       {/* Floating Aria button with pulse */}
-      <div className="fixed bottom-24 right-5 z-50">
+      <div className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-50">
         {!open && <span className="absolute inset-0 rounded-full bg-blue-400 opacity-60 animate-ping" />}
         <button
           onClick={() => setOpen(o => !o)}
@@ -467,7 +467,7 @@ export default function ChatBot() {
 
       {/* Chat window */}
       {open && (
-        <div className="fixed bottom-44 right-5 z-50 w-80 sm:w-96 bg-gray-50 rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200" style={{ height: '480px' }}>
+        <div className="fixed bottom-36 sm:bottom-40 right-2 left-2 sm:left-auto sm:right-6 z-50 w-auto sm:w-96 max-w-sm bg-gray-50 rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200" style={{ maxHeight: 'min(480px, calc(100dvh - 9rem))', minHeight: '200px' }}>
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-white flex items-center justify-center flex-shrink-0 p-1">

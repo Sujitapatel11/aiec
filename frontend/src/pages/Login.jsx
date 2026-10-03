@@ -157,7 +157,7 @@ export default function Login() {
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20">
 
           {/* Card Header */}
-          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-8 pt-8 pb-6 text-center text-white relative">
+          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-5 sm:px-8 pt-8 pb-6 text-center text-white relative">
             <div className="flex justify-center mb-3">
               <div className="bg-white rounded-2xl p-2 shadow-lg border border-amber-400/40">
                 <img src="/logo.png" alt="AIEC Logo" className="h-12 w-auto object-contain" />
@@ -176,14 +176,14 @@ export default function Login() {
           </div>
 
           {/* Form Container */}
-          <form onSubmit={handleSubmit} className="px-7 py-6 space-y-4">
+          <form onSubmit={handleSubmit} className="px-4 sm:px-7 py-6 space-y-4">
 
             {/* 3-WAY SEGMENTED ROLE SELECTOR */}
             <div>
               <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
                 Select Your Role
               </label>
-              <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-3 gap-1 p-1 sm:p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
                 {ROLES.map((r) => {
                   const active = selectedRole === r.id
                   return (
@@ -192,13 +192,13 @@ export default function Login() {
                       type="button"
                       id={`btn-role-${r.id}`}
                       onClick={() => handleRoleChange(r.id)}
-                      className={`py-2 px-2.5 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                      className={`py-2 px-1 sm:px-2.5 rounded-xl font-bold text-[11px] sm:text-xs transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 ${
                         active
                           ? 'bg-slate-900 text-white shadow-md scale-[1.02]'
                           : 'text-gray-600 hover:text-gray-900 hover:bg-slate-200/60'
                       }`}
                     >
-                      <span className="text-sm">{r.icon}</span>
+                      <span className="text-xs sm:text-sm">{r.icon}</span>
                       <span>{r.label}</span>
                     </button>
                   )

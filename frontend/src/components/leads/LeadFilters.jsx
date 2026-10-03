@@ -25,9 +25,9 @@ export default function LeadFilters({
   const hasActiveFilters = search || statusFilter || countryFilter || courseFilter
 
   return (
-    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-      {/* Search box */}
-      <div className="relative flex-1 min-w-[200px]">
+    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-3">
+      {/* Search box — full width on all sizes */}
+      <div className="relative w-full">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
           🔍
         </div>
@@ -48,13 +48,13 @@ export default function LeadFilters({
         )}
       </div>
 
-      {/* Filter dropdowns */}
+      {/* Filter dropdowns — wrap naturally, each full-width on xs */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Status */}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all"
+          className="flex-1 min-w-[120px] text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all"
         >
           <option value="">All Statuses</option>
           {STATUS_OPTIONS.map(opt => (
@@ -66,7 +66,7 @@ export default function LeadFilters({
         <select
           value={countryFilter}
           onChange={(e) => setCountryFilter(e.target.value)}
-          className="text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all max-w-[160px] truncate"
+          className="flex-1 min-w-[120px] text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all"
         >
           <option value="">All Countries</option>
           {countryOptions.map(c => (
@@ -78,7 +78,7 @@ export default function LeadFilters({
         <select
           value={courseFilter}
           onChange={(e) => setCourseFilter(e.target.value)}
-          className="text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all max-w-[180px] truncate"
+          className="flex-1 min-w-[120px] text-xs py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-700 focus:bg-white focus:border-slate-800 outline-none transition-all"
         >
           <option value="">All Courses</option>
           {courseOptions.map(cr => (
@@ -89,7 +89,7 @@ export default function LeadFilters({
         {hasActiveFilters && (
           <button
             onClick={onReset}
-            className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-all"
+            className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-all whitespace-nowrap"
           >
             Clear Filters
           </button>

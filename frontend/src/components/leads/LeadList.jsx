@@ -40,8 +40,8 @@ export default function LeadList({
         </button>
       </div>
 
-      {/* Table Area */}
-      <div className="overflow-x-auto">
+      {/* Desktop Table View */}
+      <div className="overflow-x-auto hidden md:block">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
@@ -163,6 +163,78 @@ export default function LeadList({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card List View */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, idx) => (
+            <div key={idx} className="p-4 space-y-2 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-100 rounded w-1/2" />
+            </div>
+          ))
+        ) : leads.length === 0 ? (
+          <div className="py-12 text-center px-4">
+            <div className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center text-xl mx-auto mb-2 border border-slate-100">
+              📥
+            </div>
+            <p className="font-bold text-gray-800 text-sm">No leads found</p>
+            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or search terms.</p>
+          </div>
+        ) : (
+          leads.map((l) => {
+            const isOverdue = l.is_overdue || (
+              l.next_follow_up &&
+              new Date(l.next_follow_up) < new Date() &&
+              !['converted', 'lost'].includes(l.status)
+            )
+
+            const followUpStr = l.next_follow_up
+              ? new Date(l.next_follow_up).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              : 'None'
+
+            return (
+              <div
+                key={l.id}
+                onClick={() => onSelectLead(l)}
+                className="p-4 hover:bg-slate-50/80 cursor-pointer space-y-2.5 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-900 text-sm">{l.name}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{l.email} · {l.phone}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider flex-shrink-0 ${statusColor(l.status)}`}>
+                    {statusLabel(l.status)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-gray-700">
+                  <span className="font-semibold">{l.course_interest || l.recommended_course || 'General'}</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{l.recommended_country || l.country_of_residence || '-'}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-50">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SOURCE_BADGES[l.source] || 'bg-gray-100 text-gray-600'}`}>
+                    {l.source || 'crm_manual'}
+                  </span>
+                  {isOverdue ? (
+                    <span className="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                      <span>⏰</span> Overdue ({followUpStr})
+                    </span>
+                  ) : l.next_follow_up ? (
+                    <span className="text-[11px] font-semibold text-slate-700">
+                      📅 {followUpStr}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 text-[11px]">-</span>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* Pagination Footer */}

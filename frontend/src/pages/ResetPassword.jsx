@@ -139,12 +139,12 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex items-center justify-center px-4 py-12 font-sans">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20">
-          <div className="bg-gradient-to-r from-red-700 to-red-900 px-8 pt-8 pb-6 text-center text-white">
+          <div className="bg-gradient-to-r from-red-700 to-red-900 px-5 sm:px-8 pt-8 pb-6 text-center text-white">
             <div className="text-5xl mb-3">⛔</div>
             <h1 className="text-xl font-extrabold">Link Invalid or Expired</h1>
             <p className="text-red-200 text-xs mt-1">This password reset link cannot be used</p>
           </div>
-          <div className="px-8 py-7 space-y-4 text-center">
+          <div className="px-5 sm:px-8 py-7 space-y-4 text-center">
             <p className="text-sm text-gray-600 leading-relaxed">
               This reset link has either already been used, has expired (links are valid for 1 hour),
               or is malformed.
@@ -169,12 +169,12 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex items-center justify-center px-4 py-12 font-sans">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20">
-          <div className="bg-gradient-to-r from-emerald-700 to-teal-800 px-8 pt-8 pb-6 text-center text-white">
+          <div className="bg-gradient-to-r from-emerald-700 to-teal-800 px-5 sm:px-8 pt-8 pb-6 text-center text-white">
             <div className="text-5xl mb-3">✅</div>
             <h1 className="text-xl font-extrabold">Password Reset Successful</h1>
             <p className="text-emerald-200 text-xs mt-1">Your new password is active</p>
           </div>
-          <div className="px-8 py-7 space-y-4 text-center">
+          <div className="px-5 sm:px-8 py-7 space-y-4 text-center">
             <p className="text-sm text-gray-700 leading-relaxed">
               Your AIEC Portal password has been updated. You can now log in with your new password.
             </p>
@@ -227,7 +227,7 @@ export default function ResetPassword() {
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20">
 
           {/* Card header */}
-          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-8 pt-8 pb-6 text-center text-white">
+          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-5 sm:px-8 pt-8 pb-6 text-center text-white">
             <div className="flex justify-center mb-3">
               <div className="bg-white rounded-2xl p-2 shadow-lg border border-amber-400/40">
                 <img src="/logo.png" alt="AIEC Logo" className="h-12 w-auto object-contain" />
@@ -243,7 +243,7 @@ export default function ResetPassword() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="px-7 py-6 space-y-5" noValidate>
+          <form onSubmit={handleSubmit} className="px-4 sm:px-7 py-6 space-y-5" noValidate>
 
             {/* Global error */}
             {error && (

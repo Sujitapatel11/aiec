@@ -11,7 +11,7 @@ export default function WhatsAppButton() {
   const message = encodeURIComponent('Hi! I want to know more about studying abroad.');
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 group">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 group">
       {/* Tooltip */}
       <div className="absolute bottom-16 right-0 bg-gray-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
         Chat with us

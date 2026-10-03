@@ -68,12 +68,12 @@ const flag = (name) => {
 /* ── Stat card ─────────────────────────────────────────────────────── */
 function StatCard({ icon, label, value, sub, accent }) {
   return (
-    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4`}>
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${accent}`}>{icon}</div>
-      <div>
-        <p className="text-2xl font-extrabold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs font-medium text-gray-500">{label}</p>
-        {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 sm:p-5 flex items-center gap-2.5 sm:gap-4">
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl flex-shrink-0 ${accent}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-lg sm:text-2xl font-extrabold text-gray-900 leading-tight truncate">{value}</p>
+        <p className="text-[11px] sm:text-xs font-medium text-gray-500 truncate">{label}</p>
+        {sub && <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
       </div>
     </div>
   )
@@ -724,18 +724,18 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 selection:bg-amber-400 selection:text-slate-900 font-sans">
 
       {/* Top Navbar */}
-      <header className="bg-slate-900 text-white px-6 py-4 border-b border-slate-800 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <div className="bg-white rounded-xl p-1.5 shadow-md">
-            <img src="/logo.png" alt="AIEC Logo" className="h-7 w-auto object-contain" />
+      <header className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="bg-white rounded-xl p-1 sm:p-1.5 shadow-md flex-shrink-0">
+            <img src="/logo.png" alt="AIEC Logo" className="h-6 sm:h-7 w-auto object-contain" />
           </div>
           <div>
-            <h1 className="font-extrabold text-sm sm:text-base leading-tight">UrmiNexus Dashboard</h1>
-            <p className="text-[11px] text-amber-400 font-semibold">AIEC Consultancy Tenant · Birgunj, Nepal</p>
+            <h1 className="font-extrabold text-xs sm:text-base leading-tight truncate">UrmiNexus Dashboard</h1>
+            <p className="text-[10px] sm:text-[11px] text-amber-400 font-semibold truncate">AIEC Consultancy Tenant</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-white">{userName}</p>
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${isAdmin ? 'bg-amber-400 text-slate-950' : 'bg-blue-500 text-white'}`}>
@@ -746,22 +746,22 @@ export default function Dashboard() {
           {isAdmin && (
             <button
               onClick={() => navigate('/staff')}
-              className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl border border-white/20 transition-all hidden sm:block"
+              className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-white/20 transition-all flex items-center gap-1"
             >
-              ⚙️ Manage Staff
+              ⚙️ <span className="hidden sm:inline">Manage </span>Staff
             </button>
           )}
 
           <button
             onClick={handleLogout}
-            className="text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-xl transition-all"
+            className="text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-2.5 sm:px-3 py-1.5 rounded-xl transition-all"
           >
             Sign Out
           </button>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
 
         {/* Global Action Toast Notification */}
         {actionNotice && (
@@ -773,7 +773,7 @@ export default function Dashboard() {
 
         {/* Stats Row */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <StatCard icon="📥" label="Total Leads" value={stats.total_leads} accent="bg-blue-50 text-blue-600" />
             <StatCard icon="🎓" label="Enrolled Students" value={studentTotalCount} accent="bg-emerald-50 text-emerald-600" />
             <StatCard icon="⚡" label="Visa Process" value={stats.status_breakdown?.visa_process || 0} accent="bg-amber-50 text-amber-600" />
@@ -782,11 +782,11 @@ export default function Dashboard() {
         )}
 
         {/* TAB CONTROLS */}
-        <div className="flex items-center justify-between border-b border-gray-200">
-          <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 gap-3 pb-2 sm:pb-0">
+          <div className="flex gap-2 sm:gap-4 overflow-x-auto no-scrollbar pb-1 sm:pb-0 max-w-full">
             <button
               onClick={() => setActiveTab('leads')}
-              className={`pb-3 px-2 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              className={`pb-3 px-2 font-bold text-xs sm:text-sm border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'leads' ? 'border-slate-900 text-slate-900' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
@@ -796,7 +796,7 @@ export default function Dashboard() {
 
             <button
               onClick={() => setActiveTab('students')}
-              className={`pb-3 px-2 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              className={`pb-3 px-2 font-bold text-xs sm:text-sm border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'students' ? 'border-slate-900 text-slate-900' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
@@ -806,7 +806,7 @@ export default function Dashboard() {
 
             <button
               onClick={() => setActiveTab('videos')}
-              className={`pb-3 px-2 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              className={`pb-3 px-2 font-bold text-xs sm:text-sm border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'videos' ? 'border-slate-900 text-slate-900' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
@@ -818,7 +818,7 @@ export default function Dashboard() {
           {activeTab === 'students' && (
             <button
               onClick={() => setEnrollModal(true)}
-              className="mb-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5"
+              className="mb-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 self-start sm:self-auto flex-shrink-0"
             >
               <span>➕</span> Enroll New Student
             </button>
@@ -885,33 +885,35 @@ export default function Dashboard() {
         {/* ── TAB 2: STUDENTS ──────────────────────────────────────── */}
         {activeTab === 'students' && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="font-bold text-gray-900">Enrolled Students & Visa Process Tracking</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{studentTotalCount} student records · Admin & Staff Access</p>
-              </div>
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-bold text-gray-900">Enrolled Students & Visa Process Tracking</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">{studentTotalCount} student records · Admin & Staff Access</p>
+                </div>
 
-              <div className="flex gap-2 flex-wrap">
-                {/* Status filter — Phase 1.4 */}
-                <select
-                  value={studentStatusFilter}
-                  onChange={e => { setStudentStatusFilter(e.target.value); setStudentPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-36"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="active">Active</option>
-                  <option value="on_hold">On Hold</option>
-                  <option value="graduated">Graduated</option>
-                  <option value="withdrawn">Withdrawn</option>
-                  <option value="deferred">Deferred</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Search students..."
-                  value={studentSearch}
-                  onChange={e => { setStudentSearch(e.target.value); setStudentPage(1) }}
-                  className="input-field text-xs py-1.5 px-3 w-48"
-                />
+                <div className="flex gap-2 flex-wrap">
+                  {/* Status filter — Phase 1.4 */}
+                  <select
+                    value={studentStatusFilter}
+                    onChange={e => { setStudentStatusFilter(e.target.value); setStudentPage(1) }}
+                    className="input-field text-xs py-1.5 px-3 flex-1 min-w-[120px]"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="graduated">Graduated</option>
+                    <option value="withdrawn">Withdrawn</option>
+                    <option value="deferred">Deferred</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Search students..."
+                    value={studentSearch}
+                    onChange={e => { setStudentSearch(e.target.value); setStudentPage(1) }}
+                    className="input-field text-xs py-1.5 px-3 flex-1 min-w-[140px]"
+                  />
+                </div>
               </div>
             </div>
 
@@ -930,82 +932,179 @@ export default function Dashboard() {
                 <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left">Student Profile</th>
-                      <th className="px-5 py-3 text-left">Status</th>
-                      <th className="px-5 py-3 text-left">Phone / WhatsApp</th>
-                      <th className="px-5 py-3 text-left">Destination</th>
-                      <th className="px-5 py-3 text-left">Enrolled Date</th>
-                      <th className="px-5 py-3 text-left">Total Estimated</th>
-                      <th className="px-5 py-3 text-left">Total Paid</th>
-                      <th className="px-5 py-3 text-left">Pending Balance</th>
-                      <th className="px-5 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {students.length === 0 && (
+              <>
+                {/* Desktop Table */}
+                <div className="overflow-x-auto hidden md:block">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                       <tr>
-                        <td colSpan={9} className="px-6 py-16 text-center text-gray-400">
-                          {studentTotalCount === 0 && !studentSearch && !studentStatusFilter
-                            ? 'No enrolled students found. Click "Enroll New Student" to get started.'
-                            : 'No students match the selected filters.'}
-                        </td>
+                        <th className="px-5 py-3 text-left">Student Profile</th>
+                        <th className="px-5 py-3 text-left">Status</th>
+                        <th className="px-5 py-3 text-left">Phone / WhatsApp</th>
+                        <th className="px-5 py-3 text-left">Destination</th>
+                        <th className="px-5 py-3 text-left">Enrolled Date</th>
+                        <th className="px-5 py-3 text-left">Total Estimated</th>
+                        <th className="px-5 py-3 text-left">Total Paid</th>
+                        <th className="px-5 py-3 text-left">Pending Balance</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
                       </tr>
-                    )}
-                    {students.map(st => (
-                      <tr
-                        key={st.id}
-                        onClick={() => setSelectedStudent(st)}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors"
-                      >
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-gray-900">{st.full_name}</p>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {students.length === 0 && (
+                        <tr>
+                          <td colSpan={9} className="px-6 py-16 text-center text-gray-400">
+                            {studentTotalCount === 0 && !studentSearch && !studentStatusFilter
+                              ? 'No enrolled students found. Click "Enroll New Student" to get started.'
+                              : 'No students match the selected filters.'}
+                          </td>
+                        </tr>
+                      )}
+                      {students.map(st => (
+                        <tr
+                          key={st.id}
+                          onClick={() => setSelectedStudent(st)}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-gray-900">{st.full_name}</p>
+                              {st.student_id && (
+                                <span className="text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                                  {st.student_id}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-400">@{st.username} · {st.email}</p>
+                          </td>
+                          {/* Phase 1.4 — student status badge */}
+                          <td className="px-5 py-3.5">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                              st.status === 'active'    ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                              st.status === 'on_hold'   ? 'bg-amber-100   text-amber-800   border-amber-200'   :
+                              st.status === 'graduated' ? 'bg-blue-100    text-blue-800    border-blue-200'    :
+                              st.status === 'withdrawn' ? 'bg-red-100     text-red-800     border-red-200'     :
+                              st.status === 'deferred'  ? 'bg-purple-100  text-purple-800  border-purple-200'  :
+                              'bg-gray-100 text-gray-600 border-gray-200'
+                            }`}>
+                              {st.status ? st.status.replace('_', ' ') : 'active'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-600 font-mono text-xs">{st.phone}</td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
+                              {flag(st.destination_country)}{st.destination_country}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-500 text-xs">{st.enrollment_date}</td>
+                          <td className="px-5 py-3.5 font-semibold text-gray-700">${Number(st.total_estimated_cost || 0).toLocaleString()}</td>
+                          <td className="px-5 py-3.5 font-bold text-emerald-600">${Number(st.total_paid || 0).toLocaleString()}</td>
+                          <td className="px-5 py-3.5 font-bold text-amber-600">${Number(st.pending_balance || 0).toLocaleString()}</td>
+                          <td className="px-5 py-3.5 text-right space-x-2" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => setSelectedStudent(st)}
+                              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg transition-all"
+                            >
+                              View Detail
+                            </button>
+                            {canResetStudentPassword(st) && (
+                              <button
+                                onClick={() => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(st) }}
+                                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 transition-all"
+                                title="Reset Student Password"
+                              >
+                                🔑
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteStudent(st.id)}
+                                className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1.5 rounded-lg border border-red-200 transition-all"
+                                title="Delete Student Record (Admin Only)"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card List View */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {students.length === 0 && (
+                    <div className="px-6 py-12 text-center text-gray-400 text-xs">
+                      {studentTotalCount === 0 && !studentSearch && !studentStatusFilter
+                        ? 'No enrolled students found. Click "Enroll New Student" to get started.'
+                        : 'No students match the selected filters.'}
+                    </div>
+                  )}
+                  {students.map(st => (
+                    <div
+                      key={st.id}
+                      onClick={() => setSelectedStudent(st)}
+                      className="p-4 hover:bg-slate-50 cursor-pointer space-y-2.5 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-bold text-gray-900 text-sm">{st.full_name}</p>
                             {st.student_id && (
-                              <span className="text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200/80 px-1.5 py-0.5 rounded-md">
                                 {st.student_id}
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-400">@{st.username} · {st.email}</p>
-                        </td>
-                        {/* Phase 1.4 — student status badge */}
-                        <td className="px-5 py-3.5">
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
-                            st.status === 'active'    ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                            st.status === 'on_hold'   ? 'bg-amber-100   text-amber-800   border-amber-200'   :
-                            st.status === 'graduated' ? 'bg-blue-100    text-blue-800    border-blue-200'    :
-                            st.status === 'withdrawn' ? 'bg-red-100     text-red-800     border-red-200'     :
-                            st.status === 'deferred'  ? 'bg-purple-100  text-purple-800  border-purple-200'  :
-                            'bg-gray-100 text-gray-600 border-gray-200'
-                          }`}>
-                            {st.status ? st.status.replace('_', ' ') : 'active'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600 font-mono text-xs">{st.phone}</td>
-                        <td className="px-5 py-3.5">
-                          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
-                            {flag(st.destination_country)}{st.destination_country}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-500 text-xs">{st.enrollment_date}</td>
-                        <td className="px-5 py-3.5 font-semibold text-gray-700">${Number(st.total_estimated_cost || 0).toLocaleString()}</td>
-                        <td className="px-5 py-3.5 font-bold text-emerald-600">${Number(st.total_paid || 0).toLocaleString()}</td>
-                        <td className="px-5 py-3.5 font-bold text-amber-600">${Number(st.pending_balance || 0).toLocaleString()}</td>
-                        <td className="px-5 py-3.5 text-right space-x-2" onClick={e => e.stopPropagation()}>
+                          <p className="text-xs text-gray-400 truncate">@{st.username} · {st.email}</p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                          st.status === 'active'    ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                          st.status === 'on_hold'   ? 'bg-amber-100   text-amber-800   border-amber-200'   :
+                          st.status === 'graduated' ? 'bg-blue-100    text-blue-800    border-blue-200'    :
+                          st.status === 'withdrawn' ? 'bg-red-100     text-red-800     border-red-200'     :
+                          st.status === 'deferred'  ? 'bg-purple-100  text-purple-800  border-purple-200'  :
+                          'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}>
+                          {st.status ? st.status.replace('_', ' ') : 'active'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-600 pt-0.5">
+                        <span className="font-bold bg-slate-50 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                          {flag(st.destination_country)}{st.destination_country}
+                        </span>
+                        <span className="font-mono text-gray-500">{st.phone}</span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-center text-xs border border-slate-100">
+                        <div>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">Est.</p>
+                          <p className="font-semibold text-gray-700">${Number(st.total_estimated_cost || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">Paid</p>
+                          <p className="font-bold text-emerald-600">${Number(st.total_paid || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase">Due</p>
+                          <p className="font-bold text-amber-600">${Number(st.pending_balance || 0).toLocaleString()}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1" onClick={e => e.stopPropagation()}>
+                        <span className="text-[11px] text-gray-400 font-mono">Enrolled: {st.enrollment_date}</span>
+                        <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => setSelectedStudent(st)}
-                            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg transition-all"
+                            className="text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg transition-all"
                           >
                             View Detail
                           </button>
                           {canResetStudentPassword(st) && (
                             <button
                               onClick={() => { setResetStudentError(''); setResetStudentPasswordInput(''); setResetStudentModal(st) }}
-                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 transition-all"
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2 py-1.5 rounded-lg border border-amber-200 transition-all"
                               title="Reset Student Password"
                             >
                               🔑
@@ -1014,18 +1113,18 @@ export default function Dashboard() {
                           {isAdmin && (
                             <button
                               onClick={() => handleDeleteStudent(st.id)}
-                              className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1.5 rounded-lg border border-red-200 transition-all"
+                              className="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2 py-1.5 rounded-lg border border-red-200 transition-all"
                               title="Delete Student Record (Admin Only)"
                             >
                               🗑️
                             </button>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {!studentError && !studentLoading && (
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 text-xs">
@@ -1250,7 +1349,7 @@ export default function Dashboard() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Username *</label>
                     <input
@@ -1275,7 +1374,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Phone / WhatsApp *</label>
                     <input
@@ -1877,7 +1976,7 @@ export default function Dashboard() {
                         }}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-1 text-[11px] pt-1">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-1 text-[11px] pt-1">
                       <span className={`flex items-center gap-1 ${resetStudentPasswordInput.length >= 8 ? 'text-green-600 font-medium' : 'text-gray-400'}`}>
                         {resetStudentPasswordInput.length >= 8 ? '✓' : '○'} 8+ characters
                       </span>

@@ -297,18 +297,18 @@ export default function Home() {
             {STATS.map((s, i) => (
               <div
                 key={s.label}
-                className={`rounded-2xl p-6 flex flex-col justify-between transition-transform hover:-translate-y-1 ${
+                className={`rounded-2xl p-4 sm:p-6 flex flex-col justify-between transition-transform hover:-translate-y-1 ${
                   i % 2 === 0
                     ? 'bg-navy-600 text-white shadow-xl shadow-navy-600/15'
                     : 'bg-white border border-slate-200/80 shadow-md text-slate-900'
                 }`}
               >
-                <s.icon className={`w-8 h-8 mb-4 ${i % 2 === 0 ? 'text-crimson-400' : 'text-navy-600'}`} />
+                <s.icon className={`w-6 h-6 sm:w-8 sm:h-8 mb-3 sm:mb-4 ${i % 2 === 0 ? 'text-crimson-400' : 'text-navy-600'}`} />
                 <div>
-                  <p className={`text-3xl font-extrabold font-display mb-1 ${i % 2 === 0 ? 'text-white' : 'text-slate-900'}`}>
+                  <p className={`text-2xl sm:text-3xl font-extrabold font-display mb-1 ${i % 2 === 0 ? 'text-white' : 'text-slate-900'}`}>
                     {s.value}
                   </p>
-                  <p className={`text-xs font-semibold ${i % 2 === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
+                  <p className={`text-[11px] sm:text-xs font-semibold leading-tight ${i % 2 === 0 ? 'text-slate-200' : 'text-slate-500'}`}>
                     {s.label}
                   </p>
                 </div>
@@ -666,7 +666,7 @@ export default function Home() {
                 <Link to="/apply" className="btn-primary">Take Full AI Assessment</Link>
               </div>
             ) : (
-              <form onSubmit={handleContact} className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xl space-y-4">
+              <form onSubmit={handleContact} className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-200/80 shadow-xl space-y-4">
                 <h3 className="font-display font-bold text-slate-900 text-lg mb-2">Send Us a Direct Message</h3>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <input

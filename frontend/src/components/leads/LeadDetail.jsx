@@ -101,7 +101,7 @@ export default function LeadDetail({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div className="bg-slate-900 px-6 py-5 text-white flex-shrink-0">
+        <div className="bg-slate-900 px-4 sm:px-6 py-4 sm:py-5 text-white flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
               Lead #{lead.id} · {lead.source || 'crm_manual'}

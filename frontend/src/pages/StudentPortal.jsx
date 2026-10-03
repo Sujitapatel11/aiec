@@ -321,7 +321,7 @@ export default function StudentPortal() {
                         {/* Existing File Info */}
                         {existingDoc && (
                           <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/10 text-xs flex items-center justify-between gap-2">
-                            <span className="text-gray-300 font-mono text-[11px] truncate max-w-[180px]">
+                            <span className="text-gray-300 font-mono text-[11px] truncate max-w-[130px] sm:max-w-[180px]">
                               📎 {existingDoc.file_name || 'Uploaded Document'}
                             </span>
                             <a
@@ -444,7 +444,7 @@ export default function StudentPortal() {
 
                       {/* Payment details for this step */}
                       {step.payments?.length > 0 && (
-                        <div className="bg-slate-950/80 p-3 rounded-xl border border-white/10 text-xs space-y-1 sm:min-w-[200px]">
+                        <div className="bg-slate-950/80 p-3 rounded-xl border border-white/10 text-xs space-y-1 w-full sm:w-auto sm:min-w-[180px]">
                           <p className="text-[10px] font-bold text-gray-400 uppercase">Payments Logged</p>
                           {step.payments.map(p => (
                             <div key={p.id} className="flex justify-between text-gray-300">

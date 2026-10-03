@@ -117,7 +117,7 @@ export default function StudentDetail({
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="bg-slate-900 text-white px-6 py-6 border-b border-slate-800 flex-shrink-0">
+        <div className="bg-slate-900 text-white px-4 sm:px-6 py-4 sm:py-6 border-b border-slate-800 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs bg-amber-400 text-slate-950 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-mono">
@@ -141,11 +141,11 @@ export default function StudentDetail({
           </div>
 
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-extrabold">{student.full_name}</h2>
-              <p className="text-slate-300 text-xs">@{student.username} · {student.email} · {student.phone}</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl sm:text-2xl font-extrabold truncate">{student.full_name}</h2>
+              <p className="text-slate-300 text-xs truncate">@{student.username} · {student.email} · {student.phone}</p>
               {student.lead_name && (
-                <p className="text-[11px] text-amber-300/80 mt-0.5">
+                <p className="text-[11px] text-amber-300/80 mt-0.5 truncate">
                   🔗 Converted from Lead: <span className="font-bold">{student.lead_name}</span>
                 </p>
               )}
@@ -161,21 +161,21 @@ export default function StudentDetail({
           <div className="grid grid-cols-3 gap-2 mt-4 bg-slate-800/80 p-3 rounded-2xl border border-slate-700 text-center">
             <div>
               <p className="text-[10px] text-slate-400 uppercase font-bold">Estimated</p>
-              <p className="text-sm font-extrabold text-white">${Number(student.total_estimated_cost || 0).toLocaleString()}</p>
+              <p className="text-xs sm:text-sm font-extrabold text-white">${Number(student.total_estimated_cost || 0).toLocaleString()}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400 uppercase font-bold">Paid</p>
-              <p className="text-sm font-extrabold text-emerald-400">${Number(student.total_paid || 0).toLocaleString()}</p>
+              <p className="text-xs sm:text-sm font-extrabold text-emerald-400">${Number(student.total_paid || 0).toLocaleString()}</p>
             </div>
             <div>
               <p className="text-[10px] text-slate-400 uppercase font-bold">Balance Due</p>
-              <p className="text-sm font-extrabold text-amber-400">${Number(student.pending_balance || 0).toLocaleString()}</p>
+              <p className="text-xs sm:text-sm font-extrabold text-amber-400">${Number(student.pending_balance || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
 
         {/* ── Tab bar ──────────────────────────────────────────────── */}
-        <div className="flex border-b border-gray-100 bg-gray-50/80 flex-shrink-0">
+        <div className="flex border-b border-gray-100 bg-gray-50/80 overflow-x-auto no-scrollbar scrollbar-none flex-shrink-0">
           {TABS.map(tab => {
             let badge = null
             if (tab.key === 'documents' && docsCount > 0) badge = docsCount
@@ -287,7 +287,7 @@ export default function StudentDetail({
               <div className="space-y-3">
                 {student.process_steps?.map((st, idx) => (
                   <div key={st.id} className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-800 text-xs font-extrabold flex items-center justify-center flex-shrink-0">
                           {idx + 1}
@@ -299,7 +299,7 @@ export default function StudentDetail({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
                         <select
                           value={st.status}
                           onChange={e => onStepStatusChange(st.id, e.target.value)}
