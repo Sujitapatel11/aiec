@@ -14,7 +14,7 @@ from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
     DEFAULT_CHECKLIST_TEMPLATE, _get_default_checklist,
-    CounsellingNote, FollowUp, Task, Appointment
+    CounsellingNote, FollowUp, Task, Appointment, Application
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -24,7 +24,8 @@ from .serializers import (
     StudentProfileSerializer, StudentPortalProfileSerializer,
     StudentProfileUpdateSerializer, StudentEnrollmentSerializer,
     ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer,
-    CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer
+    CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer,
+    ApplicationSerializer
 )
 from . import cloudinary_service
 from .cloudinary_service import (
@@ -2165,3 +2166,136 @@ def reset_staff_password(request, user_id):
         {'message': f"Password for '{target.username}' has been reset successfully."},
         status=status.HTTP_200_OK
     )
+
+
+# ── Application Management API (Phase 2.1) ──────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_student_applications(request, student_id):
+    """
+    GET  /api/students/{student_id}/applications/ — List applications for a student.
+    POST /api/students/{student_id}/applications/ — Create a new application for a student.
+    """
+    try:
+        student = StudentProfile.objects.get(pk=student_id)
+    except StudentProfile.DoesNotExist:
+        return Response({'error': 'Student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = hasattr(request.user, 'student_profile') and request.user.student_profile.id == student.id
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access these applications.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        applications = student.applications.select_related('student', 'course', 'country').all()
+        serializer = ApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        if not is_staff_or_admin:
+            return Response({'error': 'Students are not authorized to create applications.'}, status=status.HTTP_403_FORBIDDEN)
+
+        data = request.data.copy()
+        data['student'] = student.id
+
+        course_id = data.get('course')
+        if course_id:
+            try:
+                c = Course.objects.get(pk=course_id)
+                if not data.get('university_name'):
+                    data['university_name'] = c.university
+                if not data.get('course_name'):
+                    data['course_name'] = c.name
+                if not data.get('country'):
+                    data['country'] = c.country.id
+                if not data.get('country_name'):
+                    data['country_name'] = c.country.name
+            except Course.DoesNotExist:
+                return Response({'error': 'Selected course does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ApplicationSerializer(data=data)
+        if serializer.is_valid():
+            app = serializer.save()
+
+            if student.lead:
+                LeadActivity.objects.create(
+                    lead=student.lead,
+                    author=request.user,
+                    activity_type='note',
+                    content=f"Created Application: {app.university_name} - {app.course_name} ({app.intake}) [{app.get_status_display()}]"
+                )
+
+            return Response(ApplicationSerializer(app).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_application_detail(request, pk):
+    """
+    GET    /api/applications/{id}/ — Retrieve application detail
+    PATCH  /api/applications/{id}/ — Update application
+    DELETE /api/applications/{id}/ — Delete application (Admin only)
+    """
+    try:
+        app = Application.objects.select_related('student', 'course', 'country').get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = hasattr(request.user, 'student_profile') and request.user.student_profile.id == app.student.id
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this application.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(ApplicationSerializer(app).data)
+
+    elif request.method in ['PATCH', 'PUT']:
+        if not is_staff_or_admin:
+            return Response({'error': 'Students are not authorized to edit applications.'}, status=status.HTTP_403_FORBIDDEN)
+
+        data = request.data.copy()
+        if 'student' in data and int(data['student']) != app.student.id:
+            return Response({'error': 'Cannot change application student ownership.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        course_id = data.get('course')
+        if course_id:
+            try:
+                c = Course.objects.get(pk=course_id)
+                if not data.get('university_name'):
+                    data['university_name'] = c.university
+                if not data.get('course_name'):
+                    data['course_name'] = c.name
+                if not data.get('country'):
+                    data['country'] = c.country.id
+                if not data.get('country_name'):
+                    data['country_name'] = c.country.name
+            except Course.DoesNotExist:
+                return Response({'error': 'Selected course does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ApplicationSerializer(app, data=data, partial=(request.method == 'PATCH'))
+        if serializer.is_valid():
+            updated_app = serializer.save()
+            return Response(ApplicationSerializer(updated_app).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        if not is_staff_or_admin:
+            return Response({'error': 'Students are not authorized to delete applications.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if not request.user.is_superuser:
+            return Response({'error': 'Admin permissions required to delete applications.'}, status=status.HTTP_403_FORBIDDEN)
+
+        app.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

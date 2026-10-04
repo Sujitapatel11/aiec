@@ -49,5 +49,7 @@ urlpatterns = [
     path('documents/', views.list_student_documents),
     path('documents/<int:pk>/status/', views.verify_student_document),
     path('documents/<int:pk>/', views.delete_student_document),
+    # Phase 2.1 — Student University Applications API
+    path('students/<int:student_id>/applications/', views.manage_student_applications),
+    path('applications/<int:pk>/', views.manage_application_detail),
 ]
-

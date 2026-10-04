@@ -73,6 +73,12 @@ export const updateProcessStep    = (stepId, data)   => api.patch(`/steps/${step
 export const deleteProcessStep    = (stepId)         => api.delete(`/steps/${stepId}/`)
 export const addStepPayment       = (stepId, data)   => api.post(`/steps/${stepId}/payments/`, data)
 export const getStudentPortalMe   = ()               => api.get('/student-portal/my-profile/')
+export const getCourses           = (params = {})    => api.get('/courses/', { params })
+export const getStudentApplications = (studentId)    => api.get(`/students/${studentId}/applications/`)
+export const createStudentApplication = (studentId, data) => api.post(`/students/${studentId}/applications/`, data)
+export const getStudentApplication = (id)             => api.get(`/applications/${id}/`)
+export const updateStudentApplication = (id, data)    => api.patch(`/applications/${id}/`, data)
+export const deleteStudentApplication = (id)          => api.delete(`/applications/${id}/`)
 
 // Phase 1.4 — Lead → Student conversion
 export const convertLeadToStudent = (leadId, data)   => api.post(`/leads/${leadId}/convert-to-student/`, data)
@@ -137,4 +143,3 @@ export const sendLeadWhatsApp = (leadId, message) =>
   api.post(`/leads/${leadId}/send-whatsapp/`, { message })
 
 export default api
-

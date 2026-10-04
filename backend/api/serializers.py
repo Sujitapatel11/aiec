@@ -3,8 +3,9 @@ from django.contrib.auth.models import User
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
-    CounsellingNote, FollowUp, Task, Appointment
+    CounsellingNote, FollowUp, Task, Appointment, Application
 )
+
 
 
 class StaffUserSerializer(serializers.ModelSerializer):
@@ -360,9 +361,61 @@ class ProcessStepSerializer(serializers.ModelSerializer):
         return max(0.00, float(obj.estimated_cost) - float(self.get_total_paid(obj)))
 
 
+class ApplicationSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+    student_id_code = serializers.CharField(source='student.student_id', read_only=True)
+    course_detail = CourseSerializer(source='course', read_only=True)
+    country_code = serializers.CharField(source='country.code', read_only=True)
+
+    class Meta:
+        model = Application
+        fields = [
+            'id', 'student', 'student_name', 'student_id_code',
+            'course', 'course_detail',
+            'university_name', 'course_name', 'country', 'country_name', 'country_code',
+            'status', 'intake', 'applied_date', 'deadline', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate_status(self, value):
+        valid = {c[0] for c in Application.APPLICATION_STATUS_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"Invalid status. Must be one of: {', '.join(sorted(valid))}.")
+        return value
+
+    def validate(self, attrs):
+        applied_date = attrs.get('applied_date') or (self.instance.applied_date if self.instance else None)
+        deadline = attrs.get('deadline') or (self.instance.deadline if self.instance else None)
+        if applied_date and deadline and applied_date > deadline:
+            raise serializers.ValidationError({'deadline': 'Deadline cannot be earlier than applied date.'})
+
+        student = attrs.get('student') or (self.instance.student if self.instance else None)
+        course = attrs.get('course') or (self.instance.course if self.instance else None)
+        university_name = attrs.get('university_name', '') or (course.university if course else '') or (self.instance.university_name if self.instance else '')
+        course_name = attrs.get('course_name', '') or (course.name if course else '') or (self.instance.course_name if self.instance else '')
+        intake = attrs.get('intake', '') if 'intake' in attrs else (self.instance.intake if self.instance else '')
+
+        if student and university_name and course_name:
+            qs = Application.objects.filter(
+                student=student,
+                university_name__iexact=university_name.strip(),
+                course_name__iexact=course_name.strip(),
+                intake__iexact=intake.strip()
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    "An application for this student, university, course, and intake already exists."
+                )
+        return attrs
+
+
 class StudentProfileSerializer(serializers.ModelSerializer):
     process_steps = ProcessStepSerializer(many=True, read_only=True)
     documents = StudentDocumentSerializer(many=True, read_only=True)
+    applications = ApplicationSerializer(many=True, read_only=True)
     counselling_notes = CounsellingNoteSerializer(many=True, read_only=True)
     follow_ups = FollowUpSerializer(many=True, read_only=True)
     tasks = TaskSerializer(many=True, read_only=True)
@@ -380,9 +433,9 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone', 'destination_country',
             'enrollment_date', 'enrolled_by', 'enrolled_by_name', 'notes',
-            # Phase 1.4
+            # Phase 1.4 & Phase 2.1
             'status', 'lead', 'lead_name',
-            'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance',
+            'applications', 'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance',
             'counselling_notes', 'follow_ups', 'tasks', 'appointments',
         ]
 
@@ -412,9 +465,10 @@ class StudentPortalProfileSerializer(StudentProfileSerializer):
         fields = [
             'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone',
             'destination_country', 'enrollment_date', 'enrolled_by', 'enrolled_by_name',
-            'notes', 'status', 'lead', 'lead_name', 'process_steps', 'documents',
+            'notes', 'status', 'lead', 'lead_name', 'applications', 'process_steps', 'documents',
             'total_estimated_cost', 'total_paid', 'pending_balance',
         ]
+
 
 
 class StudentProfileUpdateSerializer(serializers.ModelSerializer):
@@ -490,6 +544,5 @@ class VideoTestimonialSerializer(serializers.ModelSerializer):
         if obj.uploaded_by:
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
         return 'System'
-
 
 

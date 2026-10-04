@@ -35,7 +35,14 @@
  *   flag                     — (name) => emoji string
  *   staffUsers               — array of { id, name, username }
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import {
+  createStudentApplication,
+  deleteStudentApplication,
+  getCourses,
+  getStudentApplications,
+  updateStudentApplication,
+} from '../../api'
 import CounsellingNotes from '../counselling/CounsellingNotes'
 import FollowUpList from '../counselling/FollowUpList'
 import TaskList from '../counselling/TaskList'
@@ -54,10 +61,34 @@ export const STUDENT_STATUS_OPTIONS = [
 const statusBadgeColor = (s) =>
   STUDENT_STATUS_OPTIONS.find(o => o.value === s)?.color || 'bg-gray-100 text-gray-600 border-gray-200'
 
+const APPLICATION_STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'applied', label: 'Applied' },
+  { value: 'under_review', label: 'Under Review' },
+  { value: 'offer_received', label: 'Offer Received' },
+  { value: 'conditional_offer', label: 'Conditional Offer' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'withdrawn', label: 'Withdrawn' },
+  { value: 'enrolled', label: 'Enrolled' },
+]
+
+const EMPTY_APPLICATION = {
+  course: '',
+  university_name: '',
+  course_name: '',
+  country_name: '',
+  status: 'draft',
+  intake: '',
+  applied_date: '',
+  deadline: '',
+  notes: '',
+}
+
 // ── Tabs definition ───────────────────────────────────────────────────────
 
 const TABS = [
   { key: 'overview',   label: 'Overview',   icon: '📋' },
+  { key: 'applications', label: 'Applications', icon: '🎓' },
   { key: 'checklist',  label: 'Checklist',  icon: '✅' },
   { key: 'documents',  label: 'Documents',  icon: '📄' },
   { key: 'activity',   label: 'Activity',   icon: '📜' },
@@ -94,6 +125,64 @@ export default function StudentDetail({
 }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [applications, setApplications] = useState(student?.applications || [])
+  const [courses, setCourses] = useState([])
+  const [coursesLoaded, setCoursesLoaded] = useState(false)
+  const [applicationForm, setApplicationForm] = useState(EMPTY_APPLICATION)
+  const [editingApplicationId, setEditingApplicationId] = useState(null)
+  const [applicationFormOpen, setApplicationFormOpen] = useState(false)
+  const [applicationLoading, setApplicationLoading] = useState(false)
+  const [applicationError, setApplicationError] = useState('')
+  const [updatingApplicationId, setUpdatingApplicationId] = useState(null)
+
+  useEffect(() => {
+    setApplications(student?.applications || [])
+  }, [student?.id, student?.applications])
+
+  useEffect(() => {
+    if (!student || activeTab !== 'applications' || coursesLoaded) return
+    let cancelled = false
+    const loadCourses = async () => {
+      const allCourses = []
+      let page = 1
+      let hasNextPage = true
+      while (hasNextPage) {
+        const { data } = await getCourses({ page })
+        if (Array.isArray(data)) {
+          allCourses.push(...data)
+          hasNextPage = false
+        } else {
+          allCourses.push(...(data.results || []))
+          hasNextPage = Boolean(data.next)
+          page += 1
+        }
+      }
+      if (!cancelled) {
+        setCourses(allCourses)
+        setCoursesLoaded(true)
+      }
+    }
+    loadCourses()
+      .catch((err) => {
+        if (!cancelled) {
+          setApplicationError(err.response?.data?.detail || 'Could not load courses.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [activeTab, coursesLoaded])
+
+  useEffect(() => {
+    if (!student || activeTab !== 'applications') return
+    let cancelled = false
+    getStudentApplications(student.id)
+      .then(({ data }) => { if (!cancelled) setApplications(data) })
+      .catch((err) => {
+        if (!cancelled) {
+          setApplicationError(err.response?.data?.detail || 'Could not load applications.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [activeTab, student?.id])
 
   if (!student) return null
 
@@ -104,6 +193,96 @@ export default function StudentDetail({
       await onUpdateStatus(student.id, newStatus)
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const startApplicationForm = (application = null) => {
+    setApplicationError('')
+    setEditingApplicationId(application?.id || null)
+    setApplicationForm(application ? {
+      course: application.course || '',
+      university_name: application.university_name || '',
+      course_name: application.course_name || '',
+      country_name: application.country_name || '',
+      status: application.status || 'draft',
+      intake: application.intake || '',
+      applied_date: application.applied_date || '',
+      deadline: application.deadline || '',
+      notes: application.notes || '',
+    } : EMPTY_APPLICATION)
+    setApplicationFormOpen(true)
+  }
+
+  const handleCourseChange = (courseId) => {
+    const course = courses.find(item => String(item.id) === String(courseId))
+    setApplicationForm(current => ({
+      ...current,
+      course: courseId,
+      university_name: course?.university || current.university_name,
+      course_name: course?.name || current.course_name,
+      country_name: course?.country_name || current.country_name,
+    }))
+  }
+
+  const handleApplicationSubmit = async (event) => {
+    event.preventDefault()
+    setApplicationLoading(true)
+    setApplicationError('')
+    const payload = {
+      ...applicationForm,
+      course: applicationForm.course || null,
+    }
+    try {
+      const response = editingApplicationId
+        ? await updateStudentApplication(editingApplicationId, payload)
+        : await createStudentApplication(student.id, payload)
+      if (editingApplicationId) {
+        setApplications(current => current.map(item => item.id === editingApplicationId ? response.data : item))
+      } else {
+        setApplications(current => [response.data, ...current])
+      }
+      setApplicationFormOpen(false)
+      setEditingApplicationId(null)
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      const errors = err.response?.data
+      setApplicationError(
+        typeof errors === 'string' ? errors :
+          errors?.non_field_errors?.join(' ') ||
+          errors?.detail ||
+          Object.entries(errors || {}).map(([field, messages]) =>
+            `${field}: ${Array.isArray(messages) ? messages.join(' ') : messages}`
+          ).join(' ') ||
+          'Could not save the application.'
+      )
+    } finally {
+      setApplicationLoading(false)
+    }
+  }
+
+  const handleApplicationStatusChange = async (application, newStatus) => {
+    setUpdatingApplicationId(application.id)
+    setApplicationError('')
+    try {
+      const { data } = await updateStudentApplication(application.id, { status: newStatus })
+      setApplications(current => current.map(item => item.id === application.id ? data : item))
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setApplicationError(err.response?.data?.detail || 'Could not update application status.')
+    } finally {
+      setUpdatingApplicationId(null)
+    }
+  }
+
+  const handleApplicationDelete = async (application) => {
+    if (!isAdmin || !window.confirm(`Delete the application to ${application.university_name}?`)) return
+    setApplicationError('')
+    try {
+      await deleteStudentApplication(application.id)
+      setApplications(current => current.filter(item => item.id !== application.id))
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setApplicationError(err.response?.data?.detail || 'Could not delete application.')
     }
   }
 
@@ -266,6 +445,155 @@ export default function StudentDetail({
                   >
                     🗑️ Delete Student Record (Admin Only)
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── APPLICATIONS TAB ─────────────────────────────────── */}
+          {activeTab === 'applications' && (
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">University Applications</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Manage independent applications for this student.</p>
+                </div>
+                <button
+                  onClick={() => startApplicationForm()}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3 py-2 rounded-xl transition-all flex-shrink-0"
+                >
+                  + Add Application
+                </button>
+              </div>
+
+              {applicationError && (
+                <p role="alert" className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-xl">
+                  {applicationError}
+                </p>
+              )}
+
+              {applicationFormOpen && (
+                <form onSubmit={handleApplicationSubmit} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-slate-900">{editingApplicationId ? 'Edit Application' : 'New Application'}</h4>
+                    <button type="button" onClick={() => setApplicationFormOpen(false)} className="text-gray-500 hover:text-gray-800 text-sm" aria-label="Close application form">✕</button>
+                  </div>
+                  <label className="block text-xs font-semibold text-gray-600">
+                    Course from catalogue (optional)
+                    <select
+                      value={applicationForm.course}
+                      onChange={e => handleCourseChange(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                    >
+                      <option value="">Enter course details manually</option>
+                      {courses.map(course => (
+                        <option key={course.id} value={course.id}>
+                          {course.name} — {course.university}{course.country_name ? ` (${course.country_name})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {[
+                      ['university_name', 'University', true],
+                      ['course_name', 'Course / Program', true],
+                      ['country_name', 'Country', false],
+                      ['intake', 'Intake', false],
+                    ].map(([field, label, required]) => (
+                      <label key={field} className="block text-xs font-semibold text-gray-600">
+                        {label}
+                        <input
+                          required={required}
+                          maxLength={field === 'university_name' || field === 'course_name' ? 200 : field === 'intake' ? 50 : 100}
+                          value={applicationForm[field]}
+                          onChange={e => setApplicationForm(current => ({ ...current, [field]: e.target.value }))}
+                          className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                        />
+                      </label>
+                    ))}
+                    <label className="block text-xs font-semibold text-gray-600">
+                      Status
+                      <select
+                        value={applicationForm.status}
+                        onChange={e => setApplicationForm(current => ({ ...current, status: e.target.value }))}
+                        className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                      >
+                        {APPLICATION_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    {[
+                      ['applied_date', 'Applied date'],
+                      ['deadline', 'Deadline'],
+                    ].map(([field, label]) => (
+                      <label key={field} className="block text-xs font-semibold text-gray-600">
+                        {label}
+                        <input
+                          type="date"
+                          value={applicationForm[field]}
+                          onChange={e => setApplicationForm(current => ({ ...current, [field]: e.target.value }))}
+                          className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <label className="block text-xs font-semibold text-gray-600">
+                    Notes
+                    <textarea
+                      value={applicationForm.notes}
+                      onChange={e => setApplicationForm(current => ({ ...current, notes: e.target.value }))}
+                      rows={2}
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={applicationLoading}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-xs px-4 py-2 rounded-xl"
+                  >
+                    {applicationLoading ? 'Saving…' : (editingApplicationId ? 'Save Changes' : 'Create Application')}
+                  </button>
+                </form>
+              )}
+
+              {applications.length === 0 ? (
+                <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400">
+                  No university applications yet. Add the first one above.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {applications.map(application => (
+                    <article key={application.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-extrabold text-slate-900">{application.university_name}</h4>
+                          <p className="text-sm text-slate-600">{application.course_name}</p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {[application.country_name, application.intake].filter(Boolean).join(' · ') || 'Country / intake not specified'}
+                          </p>
+                        </div>
+                        <select
+                          aria-label={`Status for ${application.university_name}`}
+                          value={application.status}
+                          disabled={updatingApplicationId === application.id}
+                          onChange={e => handleApplicationStatusChange(application, e.target.value)}
+                          className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:opacity-60"
+                        >
+                          {APPLICATION_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                        {application.applied_date && <span>Applied: {application.applied_date}</span>}
+                        {application.deadline && <span>Deadline: {application.deadline}</span>}
+                      </div>
+                      {application.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{application.notes}</p>}
+                      <div className="flex gap-2 border-t border-gray-100 pt-2">
+                        <button onClick={() => startApplicationForm(application)} className="text-xs font-bold text-slate-700 hover:text-slate-900">Edit</button>
+                        {isAdmin && (
+                          <button onClick={() => handleApplicationDelete(application)} className="text-xs font-bold text-red-600 hover:text-red-700">Delete</button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
                 </div>
               )}
             </div>

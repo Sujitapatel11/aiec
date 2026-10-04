@@ -257,6 +257,63 @@ class StudentProfile(models.Model):
         ]
 
 
+class Application(models.Model):
+    """An application links to Course but snapshots names so SET_NULL preserves context."""
+
+    APPLICATION_STATUS_CHOICES = [
+        ('draft',             'Draft'),
+        ('applied',           'Applied'),
+        ('under_review',      'Under Review'),
+        ('offer_received',    'Offer Received'),
+        ('conditional_offer', 'Conditional Offer'),
+        ('rejected',          'Rejected'),
+        ('withdrawn',         'Withdrawn'),
+        ('enrolled',          'Enrolled'),
+    ]
+
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='applications')
+    course = models.ForeignKey('Course', on_delete=models.SET_NULL, null=True, blank=True, related_name='applications')
+    university_name = models.CharField(max_length=200)
+    course_name = models.CharField(max_length=200)
+    country = models.ForeignKey('Country', on_delete=models.SET_NULL, null=True, blank=True, related_name='applications')
+    country_name = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=30, choices=APPLICATION_STATUS_CHOICES, default='draft', db_index=True)
+    intake = models.CharField(max_length=50, blank=True)
+    applied_date = models.DateField(null=True, blank=True)
+    deadline = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.course:
+            if not self.university_name and self.course.university:
+                self.university_name = self.course.university
+            if not self.course_name and self.course.name:
+                self.course_name = self.course.name
+            if not self.country and self.course.country:
+                self.country = self.course.country
+            if not self.country_name and self.course.country:
+                self.country_name = self.course.country.name
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Application [{self.status}]: {self.student.full_name} -> {self.university_name} ({self.course_name})"
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['student', 'status'], name='idx_app_student_status'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student', 'university_name', 'course_name', 'intake'],
+                name='unique_student_app_intake'
+            ),
+        ]
+
+
+
 
 class ProcessStep(models.Model):
     STATUS_CHOICES = [
@@ -471,5 +528,3 @@ class Appointment(models.Model):
 
     class Meta:
         ordering = ['appointment_date', '-created_at']
-
-

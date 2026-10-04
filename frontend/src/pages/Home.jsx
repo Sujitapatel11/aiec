@@ -26,7 +26,7 @@ import {
   Send,
   Play
 } from 'lucide-react';
-import { submitContact, getPublicVideoTestimonials } from '../api';
+import { getPublicVideoTestimonials } from '../api';
 import CountryHoverCard from '../components/CountryHoverCard';
 import VisaGauge2D from '../components/VisaGauge2D';
 import { COUNTRY_VIDEOS } from '../data/countryVideos';
@@ -59,10 +59,12 @@ const PROCESS = [
   { step: '06', icon: HomeIcon, title: 'Post-Arrival Care', desc: 'We support you even after you land at your destination.' },
 ];
 
+const CONTACT_WHATSAPP_NUMBER = '9779815280946';
+
 export default function Home() {
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSent, setContactSent] = useState(false);
-  const [contactLoading, setContactLoading] = useState(false);
+  const [contactError, setContactError] = useState('');
   const [activeCardId, setActiveCardId] = useState(null);
   const [videoTestimonials, setVideoTestimonials] = useState([]);
 
@@ -118,17 +120,26 @@ export default function Home() {
     }
   };
 
-  const handleContact = async (e) => {
+  const handleContact = (e) => {
     e.preventDefault();
-    setContactLoading(true);
-    try {
-      await submitContact(contactForm);
-      setContactSent(true);
-    } catch {
-      alert('Something went wrong. Please try again.');
-    } finally {
-      setContactLoading(false);
+    if (!contactForm.name.trim() || !contactForm.phone.trim()) {
+      setContactError('Name and phone / WhatsApp are required.');
+      return;
     }
+    setContactError('');
+
+    const message = [
+      'Hello, I would like to enquire about your study abroad services.',
+      '',
+      `Name: ${contactForm.name.trim()}`,
+      `Phone: ${contactForm.phone.trim()}`,
+      `Email: ${contactForm.email.trim()}`,
+      `Study Abroad Goals: ${contactForm.message.trim()}`,
+    ].join('\n');
+    const whatsappUrl = `https://wa.me/${CONTACT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    setContactSent(true);
   };
 
   return (
@@ -661,13 +672,14 @@ export default function Home() {
             {contactSent ? (
               <div className="bg-white border border-emerald-200 rounded-3xl p-10 text-center shadow-xl">
                 <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold font-display text-slate-900 mb-2">Message Received!</h3>
-                <p className="text-slate-600 font-sans text-sm mb-6">Our senior counselor will contact you within 24 hours.</p>
+                <h3 className="text-xl font-bold font-display text-slate-900 mb-2">Continue in WhatsApp</h3>
+                <p className="text-slate-600 font-sans text-sm mb-6">Your message is ready in WhatsApp. Press Send there to contact our senior counselor.</p>
                 <Link to="/apply" className="btn-primary">Take Full AI Assessment</Link>
               </div>
             ) : (
               <form onSubmit={handleContact} className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-200/80 shadow-xl space-y-4">
                 <h3 className="font-display font-bold text-slate-900 text-lg mb-2">Send Us a Direct Message</h3>
+                {contactError && <p role="alert" className="text-sm text-red-600">{contactError}</p>}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <input
                     className="input-field"
@@ -700,14 +712,9 @@ export default function Home() {
                 />
                 <button
                   type="submit"
-                  disabled={contactLoading}
                   className="btn-accent w-full text-base flex items-center justify-center gap-2"
                 >
-                  {contactLoading ? (
-                    <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending...</>
-                  ) : (
-                    <>Send Message <Send className="w-4 h-4" /></>
-                  )}
+                  <>Send Message <Send className="w-4 h-4" /></>
                 </button>
                 <p className="text-xs text-slate-400 text-center font-sans">We respond within 24 hours · 100% Confidential</p>
               </form>

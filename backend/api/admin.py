@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument,
+    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application,
 )
 
 
@@ -78,6 +78,14 @@ class StudentProfileAdmin(admin.ModelAdmin):
         ('Enrollment', {'fields': ('destination_country', 'status', 'enrolled_by', 'lead', 'notes')}),
         ('Timestamps', {'fields': ('enrollment_date', 'created_at', 'updated_at')}),
     )
+
+
+@admin.register(Application)
+class ApplicationAdmin(admin.ModelAdmin):
+    list_display = ['student', 'university_name', 'course_name', 'intake', 'status', 'applied_date', 'deadline']
+    list_filter = ['status', 'country', 'intake']
+    search_fields = ['student__full_name', 'student__student_id', 'university_name', 'course_name']
+    list_select_related = ['student', 'course', 'country']
 
 
 @admin.register(StudentIdSequence)
