@@ -15,7 +15,8 @@ from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
     DEFAULT_CHECKLIST_TEMPLATE, _get_default_checklist,
-    CounsellingNote, FollowUp, Task, Appointment, Application
+    CounsellingNote, FollowUp, Task, Appointment, Application,
+    ApplicationWorkflowProgress, CountryWorkflowStep
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -1167,6 +1168,9 @@ def manage_students(request):
     qs = StudentProfile.objects.prefetch_related(
         'process_steps__payments', 'documents', 'counselling_notes',
         'follow_ups', 'tasks', 'appointments',
+        'applications__course', 'applications__country__workflows__steps',
+        'applications__workflow_progress__workflow_step__workflow',
+        'applications__workflow_progress__completed_by',
     ).select_related('user', 'enrolled_by', 'lead').order_by('-created_at')
 
     # ── Filters ────────────────────────────────────────────────────────
@@ -1237,7 +1241,11 @@ def manage_student_detail(request, pk):
         student = StudentProfile.objects.select_related(
             'user', 'enrolled_by', 'lead'
         ).prefetch_related(
-            'counselling_notes', 'follow_ups', 'tasks', 'appointments'
+            'counselling_notes', 'follow_ups', 'tasks', 'appointments',
+            'process_steps__payments', 'documents',
+            'applications__course', 'applications__country__workflows__steps',
+            'applications__workflow_progress__workflow_step__workflow',
+            'applications__workflow_progress__completed_by',
         ).get(pk=pk)
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -1530,7 +1538,12 @@ def student_portal_me(request):
     Returns student profile, ordered checklist steps, and total payment summary.
     """
     try:
-        profile = StudentProfile.objects.get(user=request.user)
+        profile = StudentProfile.objects.prefetch_related(
+            'applications__course',
+            'applications__country__workflows__steps',
+            'applications__workflow_progress__workflow_step__workflow',
+            'applications__workflow_progress__completed_by',
+        ).get(user=request.user)
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student profile not found for current user.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2194,7 +2207,13 @@ def manage_student_applications(request, student_id):
         return Response({'error': 'You do not have permission to access these applications.'}, status=status.HTTP_403_FORBIDDEN)
 
     if request.method == 'GET':
-        applications = student.applications.select_related('student', 'course', 'country').all()
+        applications = student.applications.select_related(
+            'student', 'course', 'country'
+        ).prefetch_related(
+            'country__workflows__steps',
+            'workflow_progress__workflow_step__workflow',
+            'workflow_progress__completed_by',
+        ).all()
         status_filter = request.query_params.get('status', '').strip()
         intake_filter = request.query_params.get('intake', '').strip()
         deadline_status_filter = request.query_params.get('deadline_status', '').strip()
@@ -2238,6 +2257,15 @@ def manage_student_applications(request, student_id):
         data = request.data.copy()
         data['student'] = student.id
 
+        selected_country_id = data.get('country')
+        if selected_country_id:
+            try:
+                selected_country = Country.objects.get(pk=selected_country_id)
+            except (Country.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Selected country does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not data.get('country_name'):
+                data['country_name'] = selected_country.name
+
         course_id = data.get('course')
         if course_id:
             try:
@@ -2278,7 +2306,13 @@ def manage_application_detail(request, pk):
     DELETE /api/applications/{id}/ — Delete application (Admin only)
     """
     try:
-        app = Application.objects.select_related('student', 'course', 'country').get(pk=pk)
+        app = Application.objects.select_related(
+            'student', 'course', 'country'
+        ).prefetch_related(
+            'country__workflows__steps',
+            'workflow_progress__workflow_step__workflow',
+            'workflow_progress__completed_by',
+        ).get(pk=pk)
     except Application.DoesNotExist:
         return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2302,6 +2336,15 @@ def manage_application_detail(request, pk):
         data = request.data.copy()
         if 'student' in data and int(data['student']) != app.student.id:
             return Response({'error': 'Cannot change application student ownership.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        selected_country_id = data.get('country')
+        if selected_country_id:
+            try:
+                selected_country = Country.objects.get(pk=selected_country_id)
+            except (Country.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Selected country does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not data.get('country_name'):
+                data['country_name'] = selected_country.name
 
         course_id = data.get('course')
         if course_id:
@@ -2333,3 +2376,73 @@ def manage_application_detail(request, pk):
 
         app.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def complete_application_workflow_step(request, pk, step_id):
+    try:
+        app = Application.objects.select_related('student', 'country').prefetch_related(
+            'country__workflows__steps',
+            'workflow_progress__workflow_step__workflow',
+            'workflow_progress__completed_by',
+        ).get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == app.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if not is_staff_or_admin:
+        return Response(
+            {'error': 'Students cannot update application progress.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        workflow_step = CountryWorkflowStep.objects.select_related(
+            'workflow__country'
+        ).get(pk=step_id)
+    except CountryWorkflowStep.DoesNotExist:
+        return Response({'error': 'Workflow step not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    workflow = app.get_country_workflow()
+    if (
+        not workflow
+        or workflow_step.workflow_id != workflow.id
+        or workflow_step.workflow.country_id != app.country_id
+    ):
+        return Response(
+            {'error': 'Workflow step does not belong to this application country.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    progress, created = ApplicationWorkflowProgress.objects.get_or_create(
+        application=app,
+        workflow_step=workflow_step,
+        defaults={
+            'completed': True,
+            'completed_at': timezone.now(),
+            'completed_by': request.user,
+        },
+    )
+    if not created and not progress.completed:
+        progress.completed = True
+        progress.completed_at = timezone.now()
+        progress.completed_by = request.user
+        progress.save(update_fields=['completed', 'completed_at', 'completed_by', 'updated_at'])
+
+    app.refresh_from_db()
+    return Response(ApplicationSerializer(app).data)

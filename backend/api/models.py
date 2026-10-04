@@ -300,6 +300,17 @@ class Application(models.Model):
     def __str__(self):
         return f"Application [{self.status}]: {self.student.full_name} -> {self.university_name} ({self.course_name})"
 
+    def get_country_workflow(self):
+        progress = next(iter(self.workflow_progress.all()), None)
+        if progress:
+            return progress.workflow_step.workflow
+        if self.country_id:
+            return next(
+                (workflow for workflow in self.country.workflows.all() if workflow.active),
+                None,
+            )
+        return None
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
@@ -309,6 +320,84 @@ class Application(models.Model):
             models.UniqueConstraint(
                 fields=['student', 'university_name', 'course_name', 'intake'],
                 name='unique_student_app_intake'
+            ),
+        ]
+
+
+class CountryWorkflow(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='workflows')
+    name = models.CharField(max_length=150)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.country.name} — {self.name}"
+
+    class Meta:
+        ordering = ['country__name', 'name', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['country'],
+                condition=models.Q(active=True),
+                name='unique_active_country_workflow',
+            ),
+        ]
+
+
+class CountryWorkflowStep(models.Model):
+    workflow = models.ForeignKey(CountryWorkflow, on_delete=models.CASCADE, related_name='steps')
+    name = models.CharField(max_length=200)
+    order = models.PositiveIntegerField()
+    required = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.workflow}: {self.order}. {self.name}"
+
+    class Meta:
+        ordering = ['order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workflow', 'order'],
+                name='unique_country_workflow_step_order',
+            ),
+        ]
+
+
+class ApplicationWorkflowProgress(models.Model):
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='workflow_progress',
+    )
+    workflow_step = models.ForeignKey(
+        CountryWorkflowStep,
+        on_delete=models.PROTECT,
+        related_name='application_progress',
+    )
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='completed_application_workflow_steps',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.application}: {self.workflow_step} [{self.completed}]"
+
+    class Meta:
+        ordering = ['workflow_step__order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['application', 'workflow_step'],
+                name='unique_application_workflow_progress',
             ),
         ]
 

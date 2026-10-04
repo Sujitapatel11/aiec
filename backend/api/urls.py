@@ -52,4 +52,8 @@ urlpatterns = [
     # Phase 2.1 — Student University Applications API
     path('students/<int:student_id>/applications/', views.manage_student_applications),
     path('applications/<int:pk>/', views.manage_application_detail),
+    path(
+        'applications/<int:pk>/workflow-steps/<int:step_id>/complete/',
+        views.complete_application_workflow_step,
+    ),
 ]

@@ -38,7 +38,9 @@
 import React, { useEffect, useState } from 'react'
 import {
   createStudentApplication,
+  completeApplicationWorkflowStep,
   deleteStudentApplication,
+  getApplicationCountries,
   getCourses,
   getStudentApplications,
   updateStudentApplication,
@@ -109,6 +111,7 @@ const EMPTY_APPLICATION = {
   course: '',
   university_name: '',
   course_name: '',
+  country: '',
   country_name: '',
   status: 'draft',
   intake: '',
@@ -160,49 +163,62 @@ export default function StudentDetail({
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [applications, setApplications] = useState(student?.applications || [])
   const [courses, setCourses] = useState([])
+  const [countries, setCountries] = useState([])
   const [coursesLoaded, setCoursesLoaded] = useState(false)
+  const [countriesLoaded, setCountriesLoaded] = useState(false)
   const [applicationForm, setApplicationForm] = useState(EMPTY_APPLICATION)
   const [editingApplicationId, setEditingApplicationId] = useState(null)
   const [applicationFormOpen, setApplicationFormOpen] = useState(false)
   const [applicationLoading, setApplicationLoading] = useState(false)
   const [applicationError, setApplicationError] = useState('')
   const [updatingApplicationId, setUpdatingApplicationId] = useState(null)
+  const [updatingWorkflowStepId, setUpdatingWorkflowStepId] = useState(null)
+  const canManageApplicationWorkflow = isAdmin || localStorage.getItem('aiec_role') === 'staff'
 
   useEffect(() => {
     setApplications(student?.applications || [])
   }, [student?.id, student?.applications])
 
   useEffect(() => {
-    if (!student || activeTab !== 'applications' || coursesLoaded) return
+    if (!student || activeTab !== 'applications' || (coursesLoaded && countriesLoaded)) return
     let cancelled = false
-    const loadCourses = async () => {
-      const allCourses = []
+    const loadAllPages = async (fetchPage) => {
+      const results = []
       let page = 1
       let hasNextPage = true
       while (hasNextPage) {
-        const { data } = await getCourses({ page })
+        const { data } = await fetchPage({ page })
         if (Array.isArray(data)) {
-          allCourses.push(...data)
+          results.push(...data)
           hasNextPage = false
         } else {
-          allCourses.push(...(data.results || []))
+          results.push(...(data.results || []))
           hasNextPage = Boolean(data.next)
           page += 1
         }
       }
+      return results
+    }
+    const loadCatalogue = async () => {
+      const [allCourses, allCountries] = await Promise.all([
+        loadAllPages(getCourses),
+        loadAllPages(getApplicationCountries),
+      ])
       if (!cancelled) {
         setCourses(allCourses)
         setCoursesLoaded(true)
+        setCountries(allCountries)
+        setCountriesLoaded(true)
       }
     }
-    loadCourses()
+    loadCatalogue()
       .catch((err) => {
         if (!cancelled) {
-          setApplicationError(err.response?.data?.detail || 'Could not load courses.')
+          setApplicationError(err.response?.data?.detail || 'Could not load application catalogues.')
         }
       })
     return () => { cancelled = true }
-  }, [activeTab, coursesLoaded])
+  }, [activeTab, coursesLoaded, countriesLoaded])
 
   useEffect(() => {
     if (!student || activeTab !== 'applications') return
@@ -236,6 +252,7 @@ export default function StudentDetail({
       course: application.course || '',
       university_name: application.university_name || '',
       course_name: application.course_name || '',
+      country: application.country || '',
       country_name: application.country_name || '',
       status: application.status || 'draft',
       intake: application.intake || '',
@@ -253,8 +270,23 @@ export default function StudentDetail({
       course: courseId,
       university_name: course?.university || current.university_name,
       course_name: course?.name || current.course_name,
+      country: course?.country || current.country,
       country_name: course?.country_name || current.country_name,
     }))
+  }
+
+  const handleApplicationCountryChange = (countryId) => {
+    const country = countries.find(item => String(item.id) === String(countryId))
+    setApplicationForm(current => {
+      const course = courses.find(item => String(item.id) === String(current.course))
+      const courseMatchesCountry = country && course && String(course.country) === String(country.id)
+      return {
+        ...current,
+        course: courseMatchesCountry ? current.course : '',
+        country: countryId,
+        country_name: country?.name || current.country_name,
+      }
+    })
   }
 
   const handleApplicationSubmit = async (event) => {
@@ -264,6 +296,7 @@ export default function StudentDetail({
     const payload = {
       ...applicationForm,
       course: applicationForm.course || null,
+      country: applicationForm.country || null,
     }
     try {
       const response = editingApplicationId
@@ -309,6 +342,24 @@ export default function StudentDetail({
       )
     } finally {
       setUpdatingApplicationId(null)
+    }
+  }
+
+  const handleWorkflowStepComplete = async (application, step) => {
+    setUpdatingWorkflowStepId(`${application.id}:${step.id}`)
+    setApplicationError('')
+    try {
+      const { data } = await completeApplicationWorkflowStep(application.id, step.id)
+      setApplications(current => current.map(item => item.id === application.id ? data : item))
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setApplicationError(
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        'Could not update application progress.'
+      )
+    } finally {
+      setUpdatingWorkflowStepId(null)
     }
   }
 
@@ -531,6 +582,19 @@ export default function StudentDetail({
                       ))}
                     </select>
                   </label>
+                  <label className="block text-xs font-semibold text-gray-600">
+                    Country workflow (optional)
+                    <select
+                      value={applicationForm.country}
+                      onChange={e => handleApplicationCountryChange(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
+                    >
+                      <option value="">No platform workflow</option>
+                      {countries.map(country => (
+                        <option key={country.id} value={country.id}>{country.name}</option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="grid sm:grid-cols-2 gap-3">
                     {[
                       ['university_name', 'University', true],
@@ -544,7 +608,11 @@ export default function StudentDetail({
                           required={required}
                           maxLength={field === 'university_name' || field === 'course_name' ? 200 : field === 'intake' ? 50 : 100}
                           value={applicationForm[field]}
-                          onChange={e => setApplicationForm(current => ({ ...current, [field]: e.target.value }))}
+                          onChange={e => setApplicationForm(current => ({
+                            ...current,
+                            [field]: e.target.value,
+                            ...(field === 'country_name' ? { course: '', country: '' } : {}),
+                          }))}
                           className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm"
                         />
                       </label>
@@ -647,6 +715,35 @@ export default function StudentDetail({
                           </span>
                         </div>
                       </div>
+                      {application.workflow_steps?.length > 0 && (
+                        <div className="border-t border-slate-100 pt-3">
+                          <h5 className="text-xs font-bold text-slate-700 mb-2">
+                            {application.workflow_name || 'Country application milestones'}
+                          </h5>
+                          <ol className="space-y-2">
+                            {application.workflow_steps.map(step => (
+                              <li key={step.id} className="flex items-center justify-between gap-3 text-xs">
+                                <span className={step.completed ? 'text-emerald-700' : 'text-slate-600'}>
+                                  {step.completed ? '✓' : '○'} {step.name}
+                                  {step.completed_by_name && (
+                                    <span className="text-slate-400"> · {step.completed_by_name}</span>
+                                  )}
+                                </span>
+                                {canManageApplicationWorkflow && !step.completed && (
+                                  <button
+                                    type="button"
+                                    disabled={updatingWorkflowStepId === `${application.id}:${step.id}`}
+                                    onClick={() => handleWorkflowStepComplete(application, step)}
+                                    className="flex-shrink-0 text-[11px] font-bold text-blue-700 hover:text-blue-900 disabled:opacity-50"
+                                  >
+                                    {updatingWorkflowStepId === `${application.id}:${step.id}` ? 'Saving…' : 'Mark complete'}
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
                       {application.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{application.notes}</p>}
                       <div className="flex gap-2 border-t border-gray-100 pt-2">
                         <button onClick={() => startApplicationForm(application)} className="text-xs font-bold text-slate-700 hover:text-slate-900">Edit</button>

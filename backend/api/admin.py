@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Lead, Questionnaire, Country, Course,
     StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application,
+    CountryWorkflow, CountryWorkflowStep, ApplicationWorkflowProgress,
 )
 
 
@@ -86,6 +87,37 @@ class ApplicationAdmin(admin.ModelAdmin):
     list_filter = ['status', 'country', 'intake']
     search_fields = ['student__full_name', 'student__student_id', 'university_name', 'course_name']
     list_select_related = ['student', 'course', 'country']
+
+
+class CountryWorkflowStepInline(admin.TabularInline):
+    model = CountryWorkflowStep
+    extra = 0
+    ordering = ['order']
+
+
+@admin.register(CountryWorkflow)
+class CountryWorkflowAdmin(admin.ModelAdmin):
+    list_display = ['country', 'name', 'active', 'updated_at']
+    list_filter = ['active', 'country']
+    search_fields = ['country__name', 'name']
+    list_select_related = ['country']
+    inlines = [CountryWorkflowStepInline]
+
+
+@admin.register(CountryWorkflowStep)
+class CountryWorkflowStepAdmin(admin.ModelAdmin):
+    list_display = ['workflow', 'order', 'name', 'required']
+    list_filter = ['workflow__country', 'required']
+    search_fields = ['workflow__name', 'workflow__country__name', 'name']
+    list_select_related = ['workflow', 'workflow__country']
+
+
+@admin.register(ApplicationWorkflowProgress)
+class ApplicationWorkflowProgressAdmin(admin.ModelAdmin):
+    list_display = ['application', 'workflow_step', 'completed', 'completed_at', 'completed_by']
+    list_filter = ['completed', 'workflow_step__workflow__country']
+    search_fields = ['application__student__full_name', 'application__university_name', 'workflow_step__name']
+    list_select_related = ['application', 'workflow_step', 'completed_by']
 
 
 @admin.register(StudentIdSequence)

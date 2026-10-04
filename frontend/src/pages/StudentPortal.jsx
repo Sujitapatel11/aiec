@@ -332,6 +332,27 @@ export default function StudentPortal() {
                           </span>
                         </div>
                       </div>
+                      {application.workflow_steps?.length > 0 && (
+                        <div className="border-t border-white/10 pt-3">
+                          <h5 className="text-xs font-bold text-amber-300 mb-2">
+                            {application.workflow_name || 'Country application milestones'}
+                          </h5>
+                          <ol className="space-y-2">
+                            {application.workflow_steps.map(step => (
+                              <li key={step.id} className="flex items-start justify-between gap-3 text-xs">
+                                <span className={step.completed ? 'text-emerald-300' : 'text-gray-300'}>
+                                  {step.completed ? '✓' : '○'} {step.name}
+                                </span>
+                                <span className="flex-shrink-0 text-gray-500">
+                                  {step.completed
+                                    ? `Completed${step.completed_at ? ` · ${new Date(step.completed_at).toLocaleDateString()}` : ''}`
+                                    : 'Pending'}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>

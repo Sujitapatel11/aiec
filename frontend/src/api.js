@@ -79,6 +79,9 @@ export const createStudentApplication = (studentId, data) => api.post(`/students
 export const getStudentApplication = (id)             => api.get(`/applications/${id}/`)
 export const updateStudentApplication = (id, data)    => api.patch(`/applications/${id}/`, data)
 export const deleteStudentApplication = (id)          => api.delete(`/applications/${id}/`)
+export const getApplicationCountries = (params = {}) => api.get('/countries/', { params })
+export const completeApplicationWorkflowStep = (applicationId, stepId) =>
+  api.post(`/applications/${applicationId}/workflow-steps/${stepId}/complete/`)
 
 // Phase 1.4 — Lead → Student conversion
 export const convertLeadToStudent = (leadId, data)   => api.post(`/leads/${leadId}/convert-to-student/`, data)

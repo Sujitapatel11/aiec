@@ -4,7 +4,8 @@ from django.utils import timezone
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
-    CounsellingNote, FollowUp, Task, Appointment, Application
+    CounsellingNote, FollowUp, Task, Appointment, Application,
+    CountryWorkflowStep
 )
 
 
@@ -362,6 +363,34 @@ class ProcessStepSerializer(serializers.ModelSerializer):
         return max(0.00, float(obj.estimated_cost) - float(self.get_total_paid(obj)))
 
 
+class ApplicationWorkflowStepSerializer(serializers.ModelSerializer):
+    completed = serializers.SerializerMethodField()
+    completed_at = serializers.SerializerMethodField()
+    completed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CountryWorkflowStep
+        fields = ['id', 'name', 'order', 'required', 'completed', 'completed_at', 'completed_by_name']
+
+    def _get_progress(self, obj):
+        progress = self.context.get('workflow_progress', {})
+        return progress.get(obj.id)
+
+    def get_completed(self, obj):
+        progress = self._get_progress(obj)
+        return bool(progress and progress.completed)
+
+    def get_completed_at(self, obj):
+        progress = self._get_progress(obj)
+        return progress.completed_at if progress and progress.completed else None
+
+    def get_completed_by_name(self, obj):
+        progress = self._get_progress(obj)
+        if progress and progress.completed_by:
+            return progress.completed_by.get_full_name() or progress.completed_by.username
+        return None
+
+
 class ApplicationSerializer(serializers.ModelSerializer):
     STATUS_TRANSITIONS = {
         'draft': {'applied', 'withdrawn'},
@@ -380,6 +409,8 @@ class ApplicationSerializer(serializers.ModelSerializer):
     country_code = serializers.CharField(source='country.code', read_only=True)
     deadline_status = serializers.SerializerMethodField()
     days_until_deadline = serializers.SerializerMethodField()
+    workflow_name = serializers.SerializerMethodField()
+    workflow_steps = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -389,6 +420,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'university_name', 'course_name', 'country', 'country_name', 'country_code',
             'status', 'intake', 'applied_date', 'deadline',
             'deadline_status', 'days_until_deadline', 'notes',
+            'workflow_name', 'workflow_steps',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'deadline_status', 'days_until_deadline']
@@ -408,6 +440,33 @@ class ApplicationSerializer(serializers.ModelSerializer):
             return 'due_today'
         return 'upcoming'
 
+    def _get_workflow_progress(self, obj):
+        cached = getattr(obj, '_serialized_workflow_progress', None)
+        if cached is None:
+            cached = {
+                item.workflow_step_id: item
+                for item in obj.workflow_progress.all()
+            }
+            obj._serialized_workflow_progress = cached
+        return cached
+
+    def get_workflow_name(self, obj):
+        workflow = obj.get_country_workflow()
+        return workflow.name if workflow else None
+
+    def get_workflow_steps(self, obj):
+        workflow = obj.get_country_workflow()
+        if not workflow:
+            return []
+        return ApplicationWorkflowStepSerializer(
+            workflow.steps.all(),
+            many=True,
+            context={
+                **self.context,
+                'workflow_progress': self._get_workflow_progress(obj),
+            },
+        ).data
+
     def validate_status(self, value):
         valid = {c[0] for c in Application.APPLICATION_STATUS_CHOICES}
         if value not in valid:
@@ -415,6 +474,18 @@ class ApplicationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        if self.instance and self.instance.workflow_progress.exists():
+            country_changed = 'country' in attrs and attrs['country'] != self.instance.country
+            country_name_changed = (
+                'country_name' in attrs
+                and attrs['country_name'].strip().casefold()
+                != self.instance.country_name.strip().casefold()
+            )
+            if country_changed or country_name_changed:
+                raise serializers.ValidationError({
+                    'country': 'Country cannot be changed after application progress has started.'
+                })
+
         student = attrs.get('student') or (self.instance.student if self.instance else None)
         course = attrs.get('course') or (self.instance.course if self.instance else None)
         university_name = attrs.get('university_name', '') or (course.university if course else '') or (self.instance.university_name if self.instance else '')
