@@ -362,6 +362,17 @@ class ProcessStepSerializer(serializers.ModelSerializer):
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
+    STATUS_TRANSITIONS = {
+        'draft': {'applied', 'withdrawn'},
+        'applied': {'under_review', 'withdrawn'},
+        'under_review': {'offer_received', 'rejected', 'withdrawn'},
+        'offer_received': {'conditional_offer', 'rejected', 'withdrawn'},
+        'conditional_offer': {'enrolled', 'rejected', 'withdrawn'},
+        'rejected': set(),
+        'withdrawn': set(),
+        'enrolled': set(),
+    }
+
     student_name = serializers.CharField(source='student.full_name', read_only=True)
     student_id_code = serializers.CharField(source='student.student_id', read_only=True)
     course_detail = CourseSerializer(source='course', read_only=True)
@@ -409,6 +420,23 @@ class ApplicationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "An application for this student, university, course, and intake already exists."
                 )
+
+        new_status = attrs.get('status')
+        if (
+            self.instance
+            and 'status' in self.initial_data
+            and new_status
+            and new_status != self.instance.status
+        ):
+            allowed_statuses = self.STATUS_TRANSITIONS.get(self.instance.status, set())
+            if new_status not in allowed_statuses:
+                raise serializers.ValidationError({
+                    'status': (
+                        f"Cannot move an application from "
+                        f"{self.instance.get_status_display()} to "
+                        f"{dict(Application.APPLICATION_STATUS_CHOICES)[new_status]}."
+                    )
+                })
         return attrs
 
 
@@ -544,5 +572,4 @@ class VideoTestimonialSerializer(serializers.ModelSerializer):
         if obj.uploaded_by:
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
         return 'System'
-
 

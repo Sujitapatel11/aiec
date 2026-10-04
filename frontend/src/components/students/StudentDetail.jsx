@@ -72,6 +72,17 @@ const APPLICATION_STATUS_OPTIONS = [
   { value: 'enrolled', label: 'Enrolled' },
 ]
 
+const APPLICATION_STATUS_TRANSITIONS = {
+  draft: ['applied', 'withdrawn'],
+  applied: ['under_review', 'withdrawn'],
+  under_review: ['offer_received', 'rejected', 'withdrawn'],
+  offer_received: ['conditional_offer', 'rejected', 'withdrawn'],
+  conditional_offer: ['enrolled', 'rejected', 'withdrawn'],
+  rejected: [],
+  withdrawn: [],
+  enrolled: [],
+}
+
 const EMPTY_APPLICATION = {
   course: '',
   university_name: '',
@@ -248,6 +259,7 @@ export default function StudentDetail({
       const errors = err.response?.data
       setApplicationError(
         typeof errors === 'string' ? errors :
+          errors?.status?.join(' ') ||
           errors?.non_field_errors?.join(' ') ||
           errors?.detail ||
           Object.entries(errors || {}).map(([field, messages]) =>
@@ -268,7 +280,11 @@ export default function StudentDetail({
       setApplications(current => current.map(item => item.id === application.id ? data : item))
       if (onRefresh) onRefresh()
     } catch (err) {
-      setApplicationError(err.response?.data?.detail || 'Could not update application status.')
+      const statusError = err.response?.data?.status
+      setApplicationError(
+        Array.isArray(statusError) ? statusError.join(' ') :
+          err.response?.data?.detail || 'Could not update application status.'
+      )
     } finally {
       setUpdatingApplicationId(null)
     }
@@ -571,15 +587,20 @@ export default function StudentDetail({
                             {[application.country_name, application.intake].filter(Boolean).join(' · ') || 'Country / intake not specified'}
                           </p>
                         </div>
-                        <select
-                          aria-label={`Status for ${application.university_name}`}
-                          value={application.status}
-                          disabled={updatingApplicationId === application.id}
-                          onChange={e => handleApplicationStatusChange(application, e.target.value)}
-                          className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:opacity-60"
-                        >
-                          {APPLICATION_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                        </select>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-500">
+                          Status
+                          <select
+                            aria-label={`Status for ${application.university_name}`}
+                            value={application.status}
+                            disabled={updatingApplicationId === application.id}
+                            onChange={e => handleApplicationStatusChange(application, e.target.value)}
+                            className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:opacity-60"
+                          >
+                            {APPLICATION_STATUS_OPTIONS
+                              .filter(option => option.value === application.status || APPLICATION_STATUS_TRANSITIONS[application.status]?.includes(option.value))
+                              .map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                         {application.applied_date && <span>Applied: {application.applied_date}</span>}

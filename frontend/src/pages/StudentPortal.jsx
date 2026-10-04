@@ -34,6 +34,17 @@ const STEP_STATUS_BADGES = {
   completed:   { label: 'Completed',   color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: '✅' },
 }
 
+const APPLICATION_STATUS_LABELS = {
+  draft: 'Draft',
+  applied: 'Applied',
+  under_review: 'Under Review',
+  offer_received: 'Offer Received',
+  conditional_offer: 'Conditional Offer',
+  rejected: 'Rejected',
+  withdrawn: 'Withdrawn',
+  enrolled: 'Enrolled',
+}
+
 const CONSULTANCY_NAME = import.meta.env.VITE_CONSULTANCY_NAME || 'Aaradhya International Education Consultancy'
 const CONSULTANCY_SHORT_NAME = import.meta.env.VITE_CONSULTANCY_SHORT_NAME || 'Aaradhya International'
 const CONSULTANCY_LOGO = import.meta.env.VITE_CONSULTANCY_LOGO || '/logo.png'
@@ -252,6 +263,40 @@ export default function StudentPortal() {
                 <p className="text-[11px] text-amber-500/80 mt-1">Remaining balance due</p>
               </div>
             </div>
+
+            {/* Read-only university application statuses */}
+            <section className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-4">
+              <div className="border-b border-white/10 pb-4">
+                <h3 className="text-xl font-extrabold text-white">My University Applications</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Application progress shared by your counselor</p>
+              </div>
+              {!profile.applications?.length ? (
+                <p className="text-sm text-gray-400">No university applications have been added yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {profile.applications.map(application => (
+                    <article key={application.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
+                      <div>
+                        <h4 className="font-bold text-white">{application.university_name}</h4>
+                        <p className="text-sm text-gray-300">{application.course_name}</p>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {[application.country_name, application.intake].filter(Boolean).join(' · ') || 'Country / intake not specified'}
+                      </p>
+                      <p className="text-sm text-amber-300">
+                        <span className="text-gray-400">Application Status: </span>
+                        {APPLICATION_STATUS_LABELS[application.status] || application.status}
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
+                        {application.applied_date && <span>Applied: {application.applied_date}</span>}
+                        {application.deadline && <span>Deadline: {application.deadline}</span>}
+                      </div>
+                      {application.notes && <p className="text-xs text-gray-300 whitespace-pre-wrap">{application.notes}</p>}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {/* My Documents & Compliance Checklist */}
             <div className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">

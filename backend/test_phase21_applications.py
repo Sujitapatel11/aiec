@@ -172,11 +172,11 @@ class ApplicationApiTests(TestCase):
 
         updated = self.client.patch(
             self.application_detail_url(application),
-            {'status': 'under_review', 'intake': 'September 2027'},
+            {'status': 'applied', 'intake': 'September 2027'},
             format='json',
         )
         self.assertEqual(updated.status_code, 200, updated.data)
-        self.assertEqual(updated.data['status'], 'under_review')
+        self.assertEqual(updated.data['status'], 'applied')
         self.assertEqual(updated.data['intake'], 'September 2027')
         self.assertEqual(self.client.delete(self.application_detail_url(application)).status_code, 403)
 
@@ -201,6 +201,14 @@ class ApplicationApiTests(TestCase):
         self.assertEqual(own_detail.status_code, 200)
         self.assertEqual(other_list.status_code, 403)
         self.assertEqual(other_detail.status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                self.application_detail_url(other_app),
+                {'status': 'applied'},
+                format='json',
+            ).status_code,
+            403,
+        )
 
         self.assertEqual(
             self.client.post(
@@ -219,6 +227,8 @@ class ApplicationApiTests(TestCase):
         self.assertEqual(self.client.delete(self.application_detail_url(own_app)).status_code, 403)
 
     def test_anonymous_application_requests_are_unauthorized(self):
+        application_response = self.create_course_application()
+        application = Application.objects.get(pk=application_response.data['id'])
         self.client.force_authenticate(user=None)
 
         self.assertIn(self.client.get(self.student_applications_url()).status_code, (401, 403))
@@ -226,7 +236,116 @@ class ApplicationApiTests(TestCase):
             self.client.post(self.student_applications_url(), {}, format='json').status_code,
             (401, 403),
         )
+        self.assertIn(
+            self.client.patch(
+                self.application_detail_url(application),
+                {'status': 'applied'},
+                format='json',
+            ).status_code,
+            (401, 403),
+        )
         self.assertIn(self.client.get('/api/applications/1/').status_code, (401, 403))
+
+    def test_application_status_transitions_accept_valid_and_reject_invalid_changes(self):
+        created = self.create_course_application()
+        application = Application.objects.get(pk=created.data['id'])
+
+        valid = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'applied'},
+            format='json',
+        )
+        invalid = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'enrolled'},
+            format='json',
+        )
+        unknown = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'random_status'},
+            format='json',
+        )
+
+        self.assertEqual(valid.status_code, 200, valid.data)
+        self.assertEqual(valid.data['status'], 'applied')
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('status', invalid.data)
+        self.assertIn('Cannot move an application', str(invalid.data['status']))
+        self.assertEqual(unknown.status_code, 400)
+        self.assertIn('status', unknown.data)
+
+    def test_application_alternative_transitions_and_terminal_statuses(self):
+        created = self.create_course_application()
+        application = Application.objects.get(pk=created.data['id'])
+
+        allowed_path = [
+            'applied',
+            'under_review',
+            'offer_received',
+            'conditional_offer',
+            'enrolled',
+        ]
+        for next_status in allowed_path:
+            response = self.client.patch(
+                self.application_detail_url(application),
+                {'status': next_status},
+                format='json',
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            application.refresh_from_db()
+            self.assertEqual(application.status, next_status)
+
+        enrolled_to_rejected = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'rejected'},
+            format='json',
+        )
+        self.assertEqual(enrolled_to_rejected.status_code, 400)
+
+        alternatives = [
+            ('draft', 'withdrawn'),
+            ('applied', 'withdrawn'),
+            ('under_review', 'rejected'),
+            ('under_review', 'withdrawn'),
+            ('offer_received', 'rejected'),
+            ('offer_received', 'withdrawn'),
+            ('conditional_offer', 'rejected'),
+            ('conditional_offer', 'withdrawn'),
+        ]
+        for current_status, next_status in alternatives:
+            Application.objects.filter(pk=application.pk).update(status=current_status)
+            response = self.client.patch(
+                self.application_detail_url(application),
+                {'status': next_status},
+                format='json',
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            terminal_response = self.client.patch(
+                self.application_detail_url(application),
+                {'status': 'enrolled'},
+                format='json',
+            )
+            self.assertEqual(terminal_response.status_code, 400)
+            Application.objects.filter(pk=application.pk).update(status='draft')
+
+    def test_staff_and_admin_can_change_valid_application_statuses(self):
+        created = self.create_course_application()
+        application = Application.objects.get(pk=created.data['id'])
+
+        staff_response = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'applied'},
+            format='json',
+        )
+        self.client.force_authenticate(user=self.admin)
+        admin_response = self.client.patch(
+            self.application_detail_url(application),
+            {'status': 'under_review'},
+            format='json',
+        )
+
+        self.assertEqual(staff_response.status_code, 200, staff_response.data)
+        self.assertEqual(admin_response.status_code, 200, admin_response.data)
 
     def test_application_statuses_and_existing_student_checklist_are_unchanged(self):
         expected_statuses = {
