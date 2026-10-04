@@ -83,6 +83,28 @@ const APPLICATION_STATUS_TRANSITIONS = {
   enrolled: [],
 }
 
+const formatApplicationDate = (value) => {
+  if (!value) return 'Not set'
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+const getDeadlineSummary = (application) => {
+  if (application.deadline_status === 'upcoming') {
+    return `${application.days_until_deadline} days remaining`
+  }
+  if (application.deadline_status === 'due_today') return 'Due Today'
+  if (application.deadline_status === 'overdue') {
+    return `Overdue by ${Math.abs(application.days_until_deadline)} days`
+  }
+  return 'No Deadline'
+}
+
 const EMPTY_APPLICATION = {
   course: '',
   university_name: '',
@@ -583,9 +605,9 @@ export default function StudentDetail({
                         <div>
                           <h4 className="font-extrabold text-slate-900">{application.university_name}</h4>
                           <p className="text-sm text-slate-600">{application.course_name}</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {[application.country_name, application.intake].filter(Boolean).join(' · ') || 'Country / intake not specified'}
-                          </p>
+                          {application.country_name && (
+                            <p className="text-xs text-slate-400 mt-1">{application.country_name}</p>
+                          )}
                         </div>
                         <label className="flex flex-col gap-1 text-[11px] text-slate-500">
                           Status
@@ -602,9 +624,28 @@ export default function StudentDetail({
                           </select>
                         </label>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                        {application.applied_date && <span>Applied: {application.applied_date}</span>}
-                        {application.deadline && <span>Deadline: {application.deadline}</span>}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-3 text-xs">
+                        <div>
+                          <span className="block text-slate-400">Intake</span>
+                          <span className="font-semibold text-slate-700">{application.intake || 'Not specified'}</span>
+                        </div>
+                        <div>
+                          <span className="block text-slate-400">Applied</span>
+                          <span className="font-semibold text-slate-700">{formatApplicationDate(application.applied_date)}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="block text-slate-400">Deadline</span>
+                          <span className="font-semibold text-slate-700">
+                            {formatApplicationDate(application.deadline)}
+                            <span className={`ml-2 ${
+                              application.deadline_status === 'overdue' ? 'text-red-600' :
+                                application.deadline_status === 'due_today' ? 'text-amber-700' :
+                                  'text-slate-500'
+                            }`}>
+                              {getDeadlineSummary(application)}
+                            </span>
+                          </span>
+                        </div>
                       </div>
                       {application.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{application.notes}</p>}
                       <div className="flex gap-2 border-t border-gray-100 pt-2">

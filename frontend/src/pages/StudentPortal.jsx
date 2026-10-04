@@ -45,6 +45,28 @@ const APPLICATION_STATUS_LABELS = {
   enrolled: 'Enrolled',
 }
 
+const formatApplicationDate = (value) => {
+  if (!value) return 'Not set'
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+const getDeadlineSummary = (application) => {
+  if (application.deadline_status === 'upcoming') {
+    return `${application.days_until_deadline} days remaining`
+  }
+  if (application.deadline_status === 'due_today') return 'Due Today'
+  if (application.deadline_status === 'overdue') {
+    return `Overdue by ${Math.abs(application.days_until_deadline)} days`
+  }
+  return 'No Deadline'
+}
+
 const CONSULTANCY_NAME = import.meta.env.VITE_CONSULTANCY_NAME || 'Aaradhya International Education Consultancy'
 const CONSULTANCY_SHORT_NAME = import.meta.env.VITE_CONSULTANCY_SHORT_NAME || 'Aaradhya International'
 const CONSULTANCY_LOGO = import.meta.env.VITE_CONSULTANCY_LOGO || '/logo.png'
@@ -280,18 +302,36 @@ export default function StudentPortal() {
                         <h4 className="font-bold text-white">{application.university_name}</h4>
                         <p className="text-sm text-gray-300">{application.course_name}</p>
                       </div>
-                      <p className="text-xs text-gray-400">
-                        {[application.country_name, application.intake].filter(Boolean).join(' · ') || 'Country / intake not specified'}
-                      </p>
+                      {application.country_name && (
+                        <p className="text-xs text-gray-400">{application.country_name}</p>
+                      )}
                       <p className="text-sm text-amber-300">
                         <span className="text-gray-400">Application Status: </span>
                         {APPLICATION_STATUS_LABELS[application.status] || application.status}
                       </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
-                        {application.applied_date && <span>Applied: {application.applied_date}</span>}
-                        {application.deadline && <span>Deadline: {application.deadline}</span>}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-white/10 pt-3 text-xs">
+                        <div>
+                          <span className="block text-gray-500">Intake</span>
+                          <span className="font-semibold text-gray-200">{application.intake || 'Not specified'}</span>
+                        </div>
+                        <div>
+                          <span className="block text-gray-500">Applied</span>
+                          <span className="font-semibold text-gray-200">{formatApplicationDate(application.applied_date)}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="block text-gray-500">Deadline</span>
+                          <span className="font-semibold text-gray-200">
+                            {formatApplicationDate(application.deadline)}
+                            <span className={`ml-2 ${
+                              application.deadline_status === 'overdue' ? 'text-red-300' :
+                                application.deadline_status === 'due_today' ? 'text-amber-300' :
+                                  'text-gray-400'
+                            }`}>
+                              {getDeadlineSummary(application)}
+                            </span>
+                          </span>
+                        </div>
                       </div>
-                      {application.notes && <p className="text-xs text-gray-300 whitespace-pre-wrap">{application.notes}</p>}
                     </article>
                   ))}
                 </div>

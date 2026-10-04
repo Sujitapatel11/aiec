@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.utils import timezone
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
@@ -377,6 +378,8 @@ class ApplicationSerializer(serializers.ModelSerializer):
     student_id_code = serializers.CharField(source='student.student_id', read_only=True)
     course_detail = CourseSerializer(source='course', read_only=True)
     country_code = serializers.CharField(source='country.code', read_only=True)
+    deadline_status = serializers.SerializerMethodField()
+    days_until_deadline = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -384,10 +387,26 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'id', 'student', 'student_name', 'student_id_code',
             'course', 'course_detail',
             'university_name', 'course_name', 'country', 'country_name', 'country_code',
-            'status', 'intake', 'applied_date', 'deadline', 'notes',
+            'status', 'intake', 'applied_date', 'deadline',
+            'deadline_status', 'days_until_deadline', 'notes',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'deadline_status', 'days_until_deadline']
+
+    def get_days_until_deadline(self, obj):
+        if obj.deadline is None:
+            return None
+        return (obj.deadline - timezone.localdate()).days
+
+    def get_deadline_status(self, obj):
+        if obj.deadline is None:
+            return 'no_deadline'
+        days_until_deadline = self.get_days_until_deadline(obj)
+        if days_until_deadline < 0:
+            return 'overdue'
+        if days_until_deadline == 0:
+            return 'due_today'
+        return 'upcoming'
 
     def validate_status(self, value):
         valid = {c[0] for c in Application.APPLICATION_STATUS_CHOICES}
@@ -396,11 +415,6 @@ class ApplicationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        applied_date = attrs.get('applied_date') or (self.instance.applied_date if self.instance else None)
-        deadline = attrs.get('deadline') or (self.instance.deadline if self.instance else None)
-        if applied_date and deadline and applied_date > deadline:
-            raise serializers.ValidationError({'deadline': 'Deadline cannot be earlier than applied date.'})
-
         student = attrs.get('student') or (self.instance.student if self.instance else None)
         course = attrs.get('course') or (self.instance.course if self.instance else None)
         university_name = attrs.get('university_name', '') or (course.university if course else '') or (self.instance.university_name if self.instance else '')
@@ -438,6 +452,11 @@ class ApplicationSerializer(serializers.ModelSerializer):
                     )
                 })
         return attrs
+
+
+class StudentPortalApplicationSerializer(ApplicationSerializer):
+    class Meta(ApplicationSerializer.Meta):
+        fields = [field for field in ApplicationSerializer.Meta.fields if field != 'notes']
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
@@ -489,6 +508,8 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
 
 class StudentPortalProfileSerializer(StudentProfileSerializer):
+    applications = StudentPortalApplicationSerializer(many=True, read_only=True)
+
     class Meta(StudentProfileSerializer.Meta):
         fields = [
             'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone',
@@ -572,4 +593,3 @@ class VideoTestimonialSerializer(serializers.ModelSerializer):
         if obj.uploaded_by:
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
         return 'System'
-

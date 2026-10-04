@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.db.models import Count, Q
+from django.utils import timezone
 import secrets
 import os
 import threading
@@ -2194,6 +2195,39 @@ def manage_student_applications(request, student_id):
 
     if request.method == 'GET':
         applications = student.applications.select_related('student', 'course', 'country').all()
+        status_filter = request.query_params.get('status', '').strip()
+        intake_filter = request.query_params.get('intake', '').strip()
+        deadline_status_filter = request.query_params.get('deadline_status', '').strip()
+
+        valid_statuses = {value for value, _ in Application.APPLICATION_STATUS_CHOICES}
+        if status_filter and status_filter not in valid_statuses:
+            return Response(
+                {'status': ['Invalid application status filter.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if deadline_status_filter and deadline_status_filter not in {
+            'no_deadline', 'upcoming', 'due_today', 'overdue'
+        }:
+            return Response(
+                {'deadline_status': ['Invalid deadline status filter.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if status_filter:
+            applications = applications.filter(status=status_filter)
+        if intake_filter:
+            applications = applications.filter(intake__iexact=intake_filter)
+        if deadline_status_filter:
+            today = timezone.localdate()
+            if deadline_status_filter == 'no_deadline':
+                applications = applications.filter(deadline__isnull=True)
+            elif deadline_status_filter == 'upcoming':
+                applications = applications.filter(deadline__gt=today)
+            elif deadline_status_filter == 'due_today':
+                applications = applications.filter(deadline=today)
+            else:
+                applications = applications.filter(deadline__lt=today)
+
         serializer = ApplicationSerializer(applications, many=True)
         return Response(serializer.data)
 
