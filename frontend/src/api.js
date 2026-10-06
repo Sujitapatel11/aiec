@@ -80,6 +80,10 @@ export const getStudentApplication = (id)             => api.get(`/applications/
 export const updateStudentApplication = (id, data)    => api.patch(`/applications/${id}/`, data)
 export const deleteStudentApplication = (id)          => api.delete(`/applications/${id}/`)
 export const getApplicationCountries = (params = {}) => api.get('/countries/', { params })
+export const getApplicationEnrollment = (applicationId) => api.get(`/applications/${applicationId}/enrollment/`)
+export const createApplicationEnrollment = (applicationId, data) => api.post(`/applications/${applicationId}/enrollment/`, data)
+export const updateEnrollment = (id, data) => api.patch(`/enrollments/${id}/`, data)
+export const deleteEnrollment = (id) => api.delete(`/enrollments/${id}/`)
 export const completeApplicationWorkflowStep = (applicationId, stepId) =>
   api.post(`/applications/${applicationId}/workflow-steps/${stepId}/complete/`)
 

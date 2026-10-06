@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application,
+    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application, ApplicationOffer, VisaCase, Enrollment,
     CountryWorkflow, CountryWorkflowStep, ApplicationWorkflowProgress,
 )
 
@@ -87,6 +87,30 @@ class ApplicationAdmin(admin.ModelAdmin):
     list_filter = ['status', 'country', 'intake']
     search_fields = ['student__full_name', 'student__student_id', 'university_name', 'course_name']
     list_select_related = ['student', 'course', 'country']
+
+
+@admin.register(ApplicationOffer)
+class ApplicationOfferAdmin(admin.ModelAdmin):
+    list_display = ['application', 'offer_type', 'received_date', 'response_deadline', 'acceptance_status']
+    list_filter = ['offer_type', 'acceptance_status', 'application__status']
+    search_fields = ['application__student__full_name', 'application__university_name', 'conditions', 'notes']
+    list_select_related = ['application', 'application__student', 'offer_document']
+
+
+@admin.register(VisaCase)
+class VisaCaseAdmin(admin.ModelAdmin):
+    list_display = ['application', 'visa_type', 'status', 'application_date', 'appointment_date', 'decision_date']
+    list_filter = ['visa_type', 'status', 'application__status']
+    search_fields = ['application__student__full_name', 'application__university_name', 'rejection_reason', 'notes']
+    list_select_related = ['application', 'application__student']
+
+
+@admin.register(Enrollment)
+class EnrollmentAdmin(admin.ModelAdmin):
+    list_display = ['application', 'status', 'university_name', 'course_name', 'intake', 'enrollment_date']
+    list_filter = ['status', 'intake']
+    search_fields = ['application__student__full_name', 'university_name', 'course_name', 'student_reference', 'notes']
+    list_select_related = ['application', 'application__student']
 
 
 class CountryWorkflowStepInline(admin.TabularInline):

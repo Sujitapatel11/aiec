@@ -37,12 +37,14 @@
  */
 import React, { useEffect, useState } from 'react'
 import {
+  createApplicationEnrollment,
   createStudentApplication,
   completeApplicationWorkflowStep,
   deleteStudentApplication,
   getApplicationCountries,
   getCourses,
   getStudentApplications,
+  updateEnrollment,
   updateStudentApplication,
 } from '../../api'
 import CounsellingNotes from '../counselling/CounsellingNotes'
@@ -120,6 +122,14 @@ const EMPTY_APPLICATION = {
   notes: '',
 }
 
+const ENROLLMENT_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'enrolled', label: 'Enrolled' },
+  { value: 'deferred', label: 'Deferred' },
+  { value: 'withdrawn', label: 'Withdrawn' },
+]
+
 // ── Tabs definition ───────────────────────────────────────────────────────
 
 const TABS = [
@@ -173,6 +183,9 @@ export default function StudentDetail({
   const [applicationError, setApplicationError] = useState('')
   const [updatingApplicationId, setUpdatingApplicationId] = useState(null)
   const [updatingWorkflowStepId, setUpdatingWorkflowStepId] = useState(null)
+  const [enrollmentFormByApplication, setEnrollmentFormByApplication] = useState({})
+  const [enrollmentSaving, setEnrollmentSaving] = useState(null)
+  const [enrollmentError, setEnrollmentError] = useState('')
   const canManageApplicationWorkflow = isAdmin || localStorage.getItem('aiec_role') === 'staff'
 
   useEffect(() => {
@@ -372,6 +385,64 @@ export default function StudentDetail({
       if (onRefresh) onRefresh()
     } catch (err) {
       setApplicationError(err.response?.data?.detail || 'Could not delete application.')
+    }
+  }
+
+  const getEnrollmentForm = (application) => ({
+    status: application?.enrollment?.status || 'pending',
+    enrollment_date: application?.enrollment?.enrollment_date || '',
+    university_name: application?.enrollment?.university_name || application?.university_name || '',
+    course_name: application?.enrollment?.course_name || application?.course_name || '',
+    intake: application?.enrollment?.intake || application?.intake || '',
+    student_reference: application?.enrollment?.student_reference || '',
+    notes: application?.enrollment?.notes || '',
+  })
+
+  const handleEnrollmentFieldChange = (applicationId, field, value) => {
+    const current = applications.find(item => item.id === applicationId)
+    setEnrollmentFormByApplication(previous => ({
+      ...previous,
+      [applicationId]: {
+        ...(previous[applicationId] || getEnrollmentForm(current)),
+        [field]: value,
+      },
+    }))
+  }
+
+  const handleEnrollmentSubmit = async (event, application) => {
+    event.preventDefault()
+    const form = enrollmentFormByApplication[application.id] || getEnrollmentForm(application)
+    setEnrollmentSaving(application.id)
+    setEnrollmentError('')
+
+    try {
+      const payload = {
+        ...form,
+        enrollment_date: form.enrollment_date || null,
+        student_reference: form.student_reference || '',
+        notes: form.notes || '',
+      }
+      const { data } = application.enrollment
+        ? await updateEnrollment(application.enrollment.id, payload)
+        : await createApplicationEnrollment(application.id, payload)
+
+      setApplications(current => current.map(item => item.id === application.id ? { ...item, enrollment: data } : item))
+      setEnrollmentFormByApplication(previous => ({
+        ...previous,
+        [application.id]: getEnrollmentForm({ ...application, enrollment: data }),
+      }))
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setEnrollmentError(
+        err.response?.data?.detail ||
+        err.response?.data?.error ||
+        Object.entries(err.response?.data || {}).map(([field, messages]) =>
+          `${field}: ${Array.isArray(messages) ? messages.join(' ') : messages}`
+        ).join(' ') ||
+        'Could not save enrollment.'
+      )
+    } finally {
+      setEnrollmentSaving(null)
     }
   }
 
@@ -745,6 +816,107 @@ export default function StudentDetail({
                         </div>
                       )}
                       {application.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{application.notes}</p>}
+
+                      <div className="border-t border-slate-100 pt-3">
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <h5 className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Enrollment</h5>
+                          {application.enrollment && (
+                            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full">
+                              {application.enrollment.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {(isAdmin || localStorage.getItem('aiec_role') === 'staff') ? (
+                          <form onSubmit={(event) => handleEnrollmentSubmit(event, application)} className="space-y-2">
+                            <div className="grid sm:grid-cols-2 gap-2">
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Status
+                                <select
+                                  value={enrollmentFormByApplication[application.id]?.status || getEnrollmentForm(application).status}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'status', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                >
+                                  {ENROLLMENT_STATUS_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Enrollment date
+                                <input
+                                  type="date"
+                                  value={enrollmentFormByApplication[application.id]?.enrollment_date || getEnrollmentForm(application).enrollment_date}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'enrollment_date', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                />
+                              </label>
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                University
+                                <input
+                                  value={enrollmentFormByApplication[application.id]?.university_name || getEnrollmentForm(application).university_name}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'university_name', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                />
+                              </label>
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Course
+                                <input
+                                  value={enrollmentFormByApplication[application.id]?.course_name || getEnrollmentForm(application).course_name}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'course_name', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                />
+                              </label>
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Intake
+                                <input
+                                  value={enrollmentFormByApplication[application.id]?.intake || getEnrollmentForm(application).intake}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'intake', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                />
+                              </label>
+                              <label className="block text-[11px] font-semibold text-slate-600">
+                                Student reference
+                                <input
+                                  value={enrollmentFormByApplication[application.id]?.student_reference || getEnrollmentForm(application).student_reference}
+                                  onChange={e => handleEnrollmentFieldChange(application.id, 'student_reference', e.target.value)}
+                                  className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                                />
+                              </label>
+                            </div>
+                            <label className="block text-[11px] font-semibold text-slate-600">
+                              Notes
+                              <textarea
+                                rows={2}
+                                value={enrollmentFormByApplication[application.id]?.notes || getEnrollmentForm(application).notes}
+                                onChange={e => handleEnrollmentFieldChange(application.id, 'notes', e.target.value)}
+                                className="mt-1 w-full border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-xs"
+                              />
+                            </label>
+                            {enrollmentError && (
+                              <p className="text-[11px] text-red-600">{enrollmentError}</p>
+                            )}
+                            <button
+                              type="submit"
+                              disabled={enrollmentSaving === application.id}
+                              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-[11px] font-bold px-3 py-2 rounded-xl"
+                            >
+                              {enrollmentSaving === application.id ? 'Saving…' : application.enrollment ? 'Update Enrollment' : 'Create Enrollment'}
+                            </button>
+                          </form>
+                        ) : (
+                          application.enrollment && (
+                            <div className="space-y-1 text-[11px] text-slate-600">
+                              <p><span className="font-semibold">Status:</span> {application.enrollment.status}</p>
+                              <p><span className="font-semibold">University:</span> {application.enrollment.university_name}</p>
+                              <p><span className="font-semibold">Course:</span> {application.enrollment.course_name}</p>
+                              <p><span className="font-semibold">Intake:</span> {application.enrollment.intake}</p>
+                              <p><span className="font-semibold">Enrollment date:</span> {application.enrollment.enrollment_date || 'Not set'}</p>
+                            </div>
+                          )
+                        )}
+                      </div>
+
                       <div className="flex gap-2 border-t border-gray-100 pt-2">
                         <button onClick={() => startApplicationForm(application)} className="text-xs font-bold text-slate-700 hover:text-slate-900">Edit</button>
                         {isAdmin && (

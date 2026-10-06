@@ -15,7 +15,7 @@ from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
     DEFAULT_CHECKLIST_TEMPLATE, _get_default_checklist,
-    CounsellingNote, FollowUp, Task, Appointment, Application,
+    CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer, VisaCase, Enrollment,
     ApplicationWorkflowProgress, CountryWorkflowStep
 )
 from .serializers import (
@@ -27,7 +27,7 @@ from .serializers import (
     StudentProfileUpdateSerializer, StudentEnrollmentSerializer,
     ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer,
     CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer,
-    ApplicationSerializer
+    ApplicationSerializer, ApplicationOfferSerializer, VisaCaseSerializer, EnrollmentSerializer
 )
 from . import cloudinary_service
 from .cloudinary_service import (
@@ -2376,6 +2376,279 @@ def manage_application_detail(request, pk):
 
         app.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_application_offers(request, application_id):
+    """List or create offers for a single application."""
+    try:
+        application = Application.objects.select_related('student__user').get(pk=application_id)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access these offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        offers = application.offers.select_related('application__student', 'offer_document').all()
+        return Response(ApplicationOfferSerializer(offers, many=True).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to create offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    data = request.data.copy()
+    data['application'] = application.id
+    serializer = ApplicationOfferSerializer(data=data)
+    if serializer.is_valid():
+        offer = serializer.save()
+        return Response(ApplicationOfferSerializer(offer).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_offer_detail(request, pk):
+    """Retrieve, update, or delete a single application offer."""
+    try:
+        offer = ApplicationOffer.objects.select_related(
+            'application__student__user',
+            'offer_document__student__user',
+        ).get(pk=pk)
+    except ApplicationOffer.DoesNotExist:
+        return Response({'error': 'Offer not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == offer.application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this offer.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(ApplicationOfferSerializer(offer).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to edit offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method in ['PATCH', 'PUT']:
+        data = request.data.copy()
+        if 'application' in data and int(data['application']) != offer.application_id:
+            return Response({'error': 'Cannot change the application linked to an offer.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ApplicationOfferSerializer(offer, data=data, partial=(request.method == 'PATCH'))
+        if serializer.is_valid():
+            updated_offer = serializer.save()
+            return Response(ApplicationOfferSerializer(updated_offer).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin permissions required to delete offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    offer.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_application_visa(request, application_id):
+    """Read or create a visa case for a single application."""
+    try:
+        application = Application.objects.select_related('student__user').get(pk=application_id)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this visa case.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        try:
+            visa_case = application.visa_case
+        except VisaCase.DoesNotExist:
+            return Response({'error': 'Visa case not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(VisaCaseSerializer(visa_case).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to create visa cases.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if VisaCase.objects.filter(application=application).exists():
+        return Response({'error': 'A visa case already exists for this application.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data.copy()
+    data['application'] = application.id
+    serializer = VisaCaseSerializer(data=data)
+    if serializer.is_valid():
+        visa_case = serializer.save()
+        return Response(VisaCaseSerializer(visa_case).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_visa_detail(request, pk):
+    """Retrieve, update, or delete a visa case."""
+    try:
+        visa_case = VisaCase.objects.select_related('application__student__user').get(pk=pk)
+    except VisaCase.DoesNotExist:
+        return Response({'error': 'Visa case not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == visa_case.application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this visa case.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(VisaCaseSerializer(visa_case).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to edit visa cases.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method in ['PATCH', 'PUT']:
+        data = request.data.copy()
+        if 'application' in data and int(data['application']) != visa_case.application_id:
+            return Response({'error': 'Cannot change the application linked to a visa case.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = VisaCaseSerializer(visa_case, data=data, partial=(request.method == 'PATCH'))
+        if serializer.is_valid():
+            updated_case = serializer.save()
+            return Response(VisaCaseSerializer(updated_case).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin permissions required to delete visa cases.'}, status=status.HTTP_403_FORBIDDEN)
+
+    visa_case.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_application_enrollment(request, application_id):
+    """Read or create enrollment data for a single application."""
+    try:
+        application = Application.objects.select_related('student__user').get(pk=application_id)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this enrollment.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        try:
+            enrollment = application.enrollment
+        except Enrollment.DoesNotExist:
+            return Response({'error': 'Enrollment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(EnrollmentSerializer(enrollment).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to create enrollments.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if Enrollment.objects.filter(application=application).exists():
+        return Response({'error': 'An enrollment already exists for this application.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data.copy()
+    data['application'] = application.id
+    if not data.get('university_name'):
+        data['university_name'] = application.university_name
+    if not data.get('course_name'):
+        data['course_name'] = application.course_name
+    if not data.get('intake'):
+        data['intake'] = application.intake
+    serializer = EnrollmentSerializer(data=data)
+    if serializer.is_valid():
+        enrollment = serializer.save()
+        return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_enrollment_detail(request, pk):
+    """Retrieve, update, or delete a single enrollment."""
+    try:
+        enrollment = Enrollment.objects.select_related('application__student__user').get(pk=pk)
+    except Enrollment.DoesNotExist:
+        return Response({'error': 'Enrollment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+    is_own_student = (
+        hasattr(request.user, 'student_profile')
+        and request.user.student_profile.id == enrollment.application.student_id
+    )
+
+    if not (is_staff_or_admin or is_own_student):
+        return Response({'error': 'You do not have permission to access this enrollment.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        return Response(EnrollmentSerializer(enrollment).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to edit enrollments.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method in ['PATCH', 'PUT']:
+        data = request.data.copy()
+        if 'application' in data and int(data['application']) != enrollment.application_id:
+            return Response({'error': 'Cannot change the application linked to an enrollment.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = EnrollmentSerializer(enrollment, data=data, partial=(request.method == 'PATCH'))
+        if serializer.is_valid():
+            updated_enrollment = serializer.save()
+            return Response(EnrollmentSerializer(updated_enrollment).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin permissions required to delete enrollments.'}, status=status.HTTP_403_FORBIDDEN)
+
+    enrollment.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['POST'])

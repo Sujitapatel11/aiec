@@ -324,6 +324,123 @@ class Application(models.Model):
         ]
 
 
+class ApplicationOffer(models.Model):
+    OFFER_TYPE_CHOICES = [
+        ('conditional', 'Conditional'),
+        ('unconditional', 'Unconditional'),
+        ('scholarship', 'Scholarship'),
+    ]
+    ACCEPTANCE_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('expired', 'Expired'),
+    ]
+
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='offers')
+    offer_type = models.CharField(max_length=30, choices=OFFER_TYPE_CHOICES, default='conditional')
+    received_date = models.DateField(null=True, blank=True)
+    response_deadline = models.DateField(null=True, blank=True)
+    conditions = models.TextField(blank=True, default='')
+    tuition_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    deposit_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    deposit_deadline = models.DateField(null=True, blank=True)
+    acceptance_status = models.CharField(max_length=20, choices=ACCEPTANCE_STATUS_CHOICES, default='pending')
+    offer_document = models.ForeignKey(
+        'StudentDocument',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='application_offers',
+    )
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def student(self):
+        return self.application.student
+
+    def __str__(self):
+        return f"Offer for {self.application.student.full_name} ({self.get_offer_type_display()})"
+
+    class Meta:
+        ordering = ['-received_date', '-created_at', 'id']
+
+
+class VisaCase(models.Model):
+    VISA_TYPE_CHOICES = [
+        ('student_visa', 'Student Visa'),
+        ('dependent_visa', 'Dependent Visa'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('preparing', 'Preparing'),
+        ('submitted', 'Submitted'),
+        ('appointment_scheduled', 'Appointment Scheduled'),
+        ('biometrics_completed', 'Biometrics Completed'),
+        ('decision_pending', 'Decision Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('withdrawn', 'Withdrawn'),
+    ]
+
+    application = models.OneToOneField(Application, on_delete=models.CASCADE, related_name='visa_case')
+    visa_type = models.CharField(max_length=30, choices=VISA_TYPE_CHOICES, default='student_visa')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='not_started', db_index=True)
+    application_date = models.DateField(null=True, blank=True)
+    appointment_date = models.DateField(null=True, blank=True)
+    biometrics_date = models.DateField(null=True, blank=True)
+    decision_date = models.DateField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Visa case for {self.application.student.full_name} [{self.get_status_display()}]"
+
+    class Meta:
+        ordering = ['-updated_at', '-created_at', 'id']
+
+
+class Enrollment(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('enrolled', 'Enrolled'),
+        ('deferred', 'Deferred'),
+        ('withdrawn', 'Withdrawn'),
+    ]
+
+    application = models.OneToOneField(Application, on_delete=models.CASCADE, related_name='enrollment')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    enrollment_date = models.DateField(null=True, blank=True)
+    university_name = models.CharField(max_length=200, blank=True, default='')
+    course_name = models.CharField(max_length=200, blank=True, default='')
+    intake = models.CharField(max_length=50, blank=True, default='')
+    student_reference = models.CharField(max_length=100, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.application_id and not self.university_name:
+            self.university_name = self.application.university_name
+        if self.application_id and not self.course_name:
+            self.course_name = self.application.course_name
+        if self.application_id and not self.intake:
+            self.intake = self.application.intake
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Enrollment for {self.application.student.full_name} [{self.get_status_display()}]"
+
+    class Meta:
+        ordering = ['-updated_at', '-created_at', 'id']
+
+
 class CountryWorkflow(models.Model):
     country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='workflows')
     name = models.CharField(max_length=150)

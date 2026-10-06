@@ -359,6 +359,46 @@ export default function StudentPortal() {
               )}
             </section>
 
+            {/* Enrollment Status */}
+            <section className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-4">
+              <div className="border-b border-white/10 pb-4">
+                <h3 className="text-xl font-extrabold text-white">Enrollment Status</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Final university enrollment updates from your counselor</p>
+              </div>
+              {!profile.enrollment ? (
+                <p className="text-sm text-gray-400">No enrollment has been created yet for this student profile.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">Status</span>
+                    <p className="mt-2 text-lg font-bold text-amber-300">{profile.enrollment.status}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">Enrollment Date</span>
+                    <p className="mt-2 text-lg font-bold text-white">{formatApplicationDate(profile.enrollment.enrollment_date)}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">University</span>
+                    <p className="mt-2 text-lg font-bold text-white">{profile.enrollment.university_name || 'Not set'}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">Course</span>
+                    <p className="mt-2 text-lg font-bold text-white">{profile.enrollment.course_name || 'Not set'}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:col-span-2">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">Intake</span>
+                    <p className="mt-2 text-lg font-bold text-white">{profile.enrollment.intake || 'Not set'}</p>
+                  </div>
+                  {profile.enrollment.student_reference && (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:col-span-2">
+                      <span className="text-xs text-gray-400 uppercase tracking-wider">Student Reference</span>
+                      <p className="mt-2 text-lg font-bold text-white">{profile.enrollment.student_reference}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* My Documents & Compliance Checklist */}
             <div className="bg-slate-900/90 border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-4 gap-2">

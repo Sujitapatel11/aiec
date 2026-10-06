@@ -4,7 +4,7 @@ from django.utils import timezone
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
-    CounsellingNote, FollowUp, Task, Appointment, Application,
+    CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer, VisaCase, Enrollment,
     CountryWorkflowStep
 )
 
@@ -391,6 +391,214 @@ class ApplicationWorkflowStepSerializer(serializers.ModelSerializer):
         return None
 
 
+class ApplicationOfferSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    offer_document_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApplicationOffer
+        fields = [
+            'id', 'application', 'student', 'student_name', 'offer_type', 'received_date',
+            'response_deadline', 'conditions', 'tuition_fee', 'deposit_amount',
+            'deposit_deadline', 'acceptance_status', 'offer_document', 'offer_document_name',
+            'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_student(self, obj):
+        return obj.application.student_id
+
+    def get_student_name(self, obj):
+        return obj.application.student.full_name if obj.application and obj.application.student else None
+
+    def get_offer_document_name(self, obj):
+        return obj.offer_document.file_name if obj.offer_document else None
+
+    def validate_offer_type(self, value):
+        valid = {choice[0] for choice in ApplicationOffer.OFFER_TYPE_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"Invalid offer type. Must be one of: {', '.join(sorted(valid))}.")
+        return value
+
+    def validate_acceptance_status(self, value):
+        valid = {choice[0] for choice in ApplicationOffer.ACCEPTANCE_STATUS_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(
+                f"Invalid acceptance status. Must be one of: {', '.join(sorted(valid))}."
+            )
+        return value
+
+    def validate(self, attrs):
+        application = attrs.get('application') or (self.instance.application if self.instance else None)
+        document = attrs.get('offer_document') or (self.instance.offer_document if self.instance else None)
+
+        if application and document and document.student_id != application.student_id:
+            raise serializers.ValidationError({
+                'offer_document': 'Offer document must belong to the same student as the application.'
+            })
+
+        if application and 'application' in self.initial_data:
+            try:
+                application_id = int(self.initial_data['application'])
+            except (TypeError, ValueError):
+                application_id = None
+            if application_id is not None and application_id != application.id:
+                raise serializers.ValidationError({'application': 'Cannot change the application linked to an offer.'})
+
+        return attrs
+
+
+class VisaCaseSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    application_student = serializers.SerializerMethodField()
+    STATUS_TRANSITIONS = {
+        'not_started': {'preparing'},
+        'preparing': {'submitted'},
+        'submitted': {'appointment_scheduled', 'withdrawn'},
+        'appointment_scheduled': {'biometrics_completed', 'withdrawn'},
+        'biometrics_completed': {'decision_pending', 'withdrawn'},
+        'decision_pending': {'approved', 'rejected', 'withdrawn'},
+        'approved': set(),
+        'rejected': set(),
+        'withdrawn': set(),
+    }
+
+    class Meta:
+        model = VisaCase
+        fields = [
+            'id', 'application', 'student', 'student_name', 'application_student', 'visa_type', 'status',
+            'application_date', 'appointment_date', 'biometrics_date', 'decision_date',
+            'rejection_reason', 'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_student(self, obj):
+        return obj.application.student_id
+
+    def get_student_name(self, obj):
+        return obj.application.student.full_name if obj.application and obj.application.student else None
+
+    def get_application_student(self, obj):
+        return self.get_student_name(obj)
+
+    def validate_visa_type(self, value):
+        valid = {choice[0] for choice in VisaCase.VISA_TYPE_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"Invalid visa type. Must be one of: {', '.join(sorted(valid))}.")
+        return value
+
+    def validate_status(self, value):
+        valid = {choice[0] for choice in VisaCase.STATUS_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"Invalid status. Must be one of: {', '.join(sorted(valid))}.")
+        return value
+
+    def validate(self, attrs):
+        application = attrs.get('application') or (self.instance.application if self.instance else None)
+        if application and 'application' in self.initial_data:
+            try:
+                application_id = int(self.initial_data['application'])
+            except (TypeError, ValueError):
+                application_id = None
+            if application_id is not None and application_id != application.id:
+                raise serializers.ValidationError({'application': 'Cannot change the application linked to a visa case.'})
+
+        new_status = attrs.get('status')
+        current_status = self.instance.status if self.instance else 'not_started'
+        if new_status is not None:
+            allowed = self.STATUS_TRANSITIONS.get(current_status, set())
+            if not self.instance and current_status == 'not_started' and new_status not in allowed:
+                raise serializers.ValidationError({
+                    'status': (
+                        f"Cannot start a visa case in {dict(VisaCase.STATUS_CHOICES)[new_status]} "
+                        f"from {dict(VisaCase.STATUS_CHOICES)[current_status]}."
+                    )
+                })
+            if self.instance and 'status' in self.initial_data and new_status != self.instance.status:
+                allowed = self.STATUS_TRANSITIONS.get(self.instance.status, set())
+                if new_status not in allowed:
+                    raise serializers.ValidationError({
+                        'status': (
+                            f"Cannot move a visa case from {self.instance.get_status_display()} to "
+                            f"{dict(VisaCase.STATUS_CHOICES)[new_status]}."
+                        )
+                    })
+        return attrs
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    STATUS_TRANSITIONS = {
+        'pending': {'confirmed', 'deferred', 'withdrawn'},
+        'confirmed': {'enrolled', 'deferred', 'withdrawn'},
+        'enrolled': set(),
+        'deferred': set(),
+        'withdrawn': set(),
+    }
+
+    class Meta:
+        model = Enrollment
+        fields = [
+            'id', 'application', 'student', 'student_name', 'status',
+            'enrollment_date', 'university_name', 'course_name', 'intake',
+            'student_reference', 'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_student(self, obj):
+        return obj.application.student_id
+
+    def get_student_name(self, obj):
+        return obj.application.student.full_name if obj.application and obj.application.student else None
+
+    def validate_status(self, value):
+        valid = {choice[0] for choice in Enrollment.STATUS_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"Invalid status. Must be one of: {', '.join(sorted(valid))}.")
+        return value
+
+    def validate(self, attrs):
+        application = attrs.get('application') or (self.instance.application if self.instance else None)
+        if application and 'application' in self.initial_data:
+            try:
+                application_id = int(self.initial_data['application'])
+            except (TypeError, ValueError):
+                application_id = None
+            if application_id is not None and application_id != application.id:
+                raise serializers.ValidationError({'application': 'Cannot change the application linked to an enrollment.'})
+
+        if application and not attrs.get('university_name') and not self.instance:
+            attrs['university_name'] = application.university_name
+        if application and not attrs.get('course_name') and not self.instance:
+            attrs['course_name'] = application.course_name
+        if application and 'intake' not in attrs and not self.instance:
+            attrs['intake'] = application.intake
+
+        new_status = attrs.get('status')
+        current_status = self.instance.status if self.instance else 'pending'
+        if new_status is not None:
+            if not self.instance and current_status == 'pending' and new_status != 'pending':
+                raise serializers.ValidationError({
+                    'status': (
+                        f"Cannot start an enrollment in {dict(Enrollment.STATUS_CHOICES)[new_status]} "
+                        f"from {dict(Enrollment.STATUS_CHOICES)[current_status]}."
+                    )
+                })
+            if self.instance and 'status' in self.initial_data and new_status != self.instance.status:
+                allowed = self.STATUS_TRANSITIONS.get(self.instance.status, set())
+                if new_status not in allowed:
+                    raise serializers.ValidationError({
+                        'status': (
+                            f"Cannot move an enrollment from {self.instance.get_status_display()} to "
+                            f"{dict(Enrollment.STATUS_CHOICES)[new_status]}."
+                        )
+                    })
+        return attrs
+
+
 class ApplicationSerializer(serializers.ModelSerializer):
     STATUS_TRANSITIONS = {
         'draft': {'applied', 'withdrawn'},
@@ -411,6 +619,9 @@ class ApplicationSerializer(serializers.ModelSerializer):
     days_until_deadline = serializers.SerializerMethodField()
     workflow_name = serializers.SerializerMethodField()
     workflow_steps = serializers.SerializerMethodField()
+    offers = ApplicationOfferSerializer(many=True, read_only=True)
+    visa_case = VisaCaseSerializer(read_only=True)
+    enrollment = EnrollmentSerializer(read_only=True)
 
     class Meta:
         model = Application
@@ -420,7 +631,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'university_name', 'course_name', 'country', 'country_name', 'country_code',
             'status', 'intake', 'applied_date', 'deadline',
             'deadline_status', 'days_until_deadline', 'notes',
-            'workflow_name', 'workflow_steps',
+            'workflow_name', 'workflow_steps', 'offers', 'visa_case', 'enrollment',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'deadline_status', 'days_until_deadline']
@@ -530,10 +741,19 @@ class StudentPortalApplicationSerializer(ApplicationSerializer):
         fields = [field for field in ApplicationSerializer.Meta.fields if field != 'notes']
 
 
+class StudentPortalEnrollmentSerializer(EnrollmentSerializer):
+    class Meta(EnrollmentSerializer.Meta):
+        fields = [
+            'id', 'application', 'student', 'student_name', 'status', 'enrollment_date',
+            'university_name', 'course_name', 'intake', 'student_reference'
+        ]
+
+
 class StudentProfileSerializer(serializers.ModelSerializer):
     process_steps = ProcessStepSerializer(many=True, read_only=True)
     documents = StudentDocumentSerializer(many=True, read_only=True)
     applications = ApplicationSerializer(many=True, read_only=True)
+    enrollment = serializers.SerializerMethodField()
     counselling_notes = CounsellingNoteSerializer(many=True, read_only=True)
     follow_ups = FollowUpSerializer(many=True, read_only=True)
     tasks = TaskSerializer(many=True, read_only=True)
@@ -553,9 +773,19 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             'enrollment_date', 'enrolled_by', 'enrolled_by_name', 'notes',
             # Phase 1.4 & Phase 2.1
             'status', 'lead', 'lead_name',
-            'applications', 'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance',
+            'applications', 'enrollment', 'process_steps', 'documents', 'total_estimated_cost', 'total_paid', 'pending_balance',
             'counselling_notes', 'follow_ups', 'tasks', 'appointments',
         ]
+
+    def get_enrollment(self, obj):
+        enrollment = None
+        for application in obj.applications.all():
+            if hasattr(application, 'enrollment'):
+                enrollment = application.enrollment
+                break
+        if not enrollment:
+            return None
+        return StudentPortalEnrollmentSerializer(enrollment).data
 
     def get_enrolled_by_name(self, obj):
         if obj.enrolled_by:
@@ -580,12 +810,13 @@ class StudentProfileSerializer(serializers.ModelSerializer):
 
 class StudentPortalProfileSerializer(StudentProfileSerializer):
     applications = StudentPortalApplicationSerializer(many=True, read_only=True)
+    enrollment = StudentPortalEnrollmentSerializer(read_only=True)
 
     class Meta(StudentProfileSerializer.Meta):
         fields = [
             'id', 'student_id', 'user', 'username', 'email', 'full_name', 'phone',
             'destination_country', 'enrollment_date', 'enrolled_by', 'enrolled_by_name',
-            'notes', 'status', 'lead', 'lead_name', 'applications', 'process_steps', 'documents',
+            'notes', 'status', 'lead', 'lead_name', 'applications', 'enrollment', 'process_steps', 'documents',
             'total_estimated_cost', 'total_paid', 'pending_balance',
         ]
 
