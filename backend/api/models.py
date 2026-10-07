@@ -1,4 +1,6 @@
 from django.db import models, transaction
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.conf import settings
@@ -286,6 +288,28 @@ class Application(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        country_fields_updated = update_fields is None or bool(
+            {'country', 'country_name'} & set(update_fields)
+        )
+        if self.pk and country_fields_updated:
+            old_country = type(self).objects.filter(pk=self.pk).values_list(
+                'country_id', 'country_name'
+            ).first()
+            if old_country:
+                country_changed = old_country[0] != self.country_id
+                country_name_changed = old_country[1].strip().casefold() != self.country_name.strip().casefold()
+                has_workflow_progress = self.workflow_progress.exists()
+                has_document_progress = self.document_requirements.filter(
+                    student_document__isnull=False
+                ).exists()
+                if (country_changed or country_name_changed) and (
+                    has_workflow_progress or has_document_progress
+                ):
+                    raise ValidationError({
+                        'country': 'Country cannot be changed after application progress has started.'
+                    })
+
         if self.course:
             if not self.university_name and self.course.university:
                 self.university_name = self.course.university
@@ -296,6 +320,7 @@ class Application(models.Model):
             if not self.country_name and self.course.country:
                 self.country_name = self.course.country.name
         super().save(*args, **kwargs)
+        self.ensure_document_requirements()
 
     def __str__(self):
         return f"Application [{self.status}]: {self.student.full_name} -> {self.university_name} ({self.course_name})"
@@ -310,6 +335,29 @@ class Application(models.Model):
                 None,
             )
         return None
+
+    def ensure_document_requirements(self):
+        if not self.country_id:
+            return
+        template = CountryDocumentTemplate.objects.filter(
+            country_id=self.country_id,
+            active=True,
+        ).first()
+        if not template:
+            return
+        for template_requirement in template.requirements.all():
+            ApplicationDocumentRequirement.objects.get_or_create(
+                application=self,
+                template=template,
+                document_type=template_requirement.document_type,
+                defaults={
+                    'template_requirement': template_requirement,
+                    'label': template_requirement.label,
+                    'description': template_requirement.description,
+                    'required': template_requirement.required,
+                    'order': template_requirement.order,
+                },
+            )
 
     class Meta:
         ordering = ['-created_at']
@@ -402,6 +450,242 @@ class ApplicationWorkflowProgress(models.Model):
         ]
 
 
+class CountryDocumentTemplate(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='document_templates')
+    name = models.CharField(max_length=150)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.country.name} — {self.name}"
+
+    class Meta:
+        ordering = ['country__name', 'name', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['country'],
+                condition=models.Q(active=True),
+                name='unique_active_country_document_template',
+            ),
+        ]
+
+
+class CountryDocumentRequirement(models.Model):
+    template = models.ForeignKey(
+        CountryDocumentTemplate,
+        on_delete=models.CASCADE,
+        related_name='requirements',
+    )
+    document_type = models.CharField(max_length=100)
+    label = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    required = models.BooleanField(default=True)
+    order = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.template}: {self.label}"
+
+    class Meta:
+        ordering = ['order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['template', 'document_type'],
+                name='unique_template_document_type',
+            ),
+            models.UniqueConstraint(
+                fields=['template', 'order'],
+                name='unique_template_document_order',
+            ),
+        ]
+
+
+class ApplicationDocumentRequirement(models.Model):
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='document_requirements',
+    )
+    template = models.ForeignKey(
+        CountryDocumentTemplate,
+        on_delete=models.PROTECT,
+        related_name='application_requirements',
+    )
+    template_requirement = models.ForeignKey(
+        CountryDocumentRequirement,
+        on_delete=models.PROTECT,
+        related_name='application_requirements',
+    )
+    document_type = models.CharField(max_length=100)
+    label = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    required = models.BooleanField(default=True)
+    order = models.PositiveIntegerField()
+    student_document = models.ForeignKey(
+        'StudentDocument',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='application_requirements',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def status(self):
+        if not self.student_document_id:
+            return 'missing'
+        if self.student_document.verification_status == 'verified':
+            return 'verified'
+        if self.student_document.verification_status == 'rejected':
+            return 'rejected'
+        return 'submitted'
+
+    def __str__(self):
+        return f"{self.application}: {self.label} [{self.status}]"
+
+    class Meta:
+        ordering = ['order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['application', 'template', 'document_type'],
+                name='unique_application_template_document_type',
+            ),
+        ]
+
+
+class ApplicationOffer(models.Model):
+    OFFER_TYPE_CHOICES = [
+        ('conditional', 'Conditional Offer'),
+        ('unconditional', 'Unconditional Offer'),
+        ('deferred', 'Deferred Offer'),
+    ]
+    ACCEPTANCE_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('expired', 'Expired'),
+    ]
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='offers',
+    )
+    offer_type = models.CharField(max_length=30, choices=OFFER_TYPE_CHOICES, default='conditional')
+    acceptance_status = models.CharField(max_length=30, choices=ACCEPTANCE_STATUS_CHOICES, default='pending', db_index=True)
+    received_date = models.DateField(null=True, blank=True)
+    response_deadline = models.DateField(null=True, blank=True)
+    tuition_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, validators=[MinValueValidator(0)])
+    deposit_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, validators=[MinValueValidator(0)])
+    deposit_deadline = models.DateField(null=True, blank=True)
+    currency = models.CharField(max_length=10, default='USD')
+    conditions = models.TextField(blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    offer_code = models.CharField(max_length=80, blank=True, default='')
+    is_current = models.BooleanField(default=True)
+    offer_document = models.ForeignKey(
+        'StudentDocument',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='offer_links',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def status(self):
+        return self.acceptance_status
+
+    @status.setter
+    def status(self, value):
+        self.acceptance_status = value
+
+    @property
+    def issued_at(self):
+        return self.received_date
+
+    @issued_at.setter
+    def issued_at(self, value):
+        self.received_date = value
+
+    @property
+    def expires_at(self):
+        return self.response_deadline
+
+    @expires_at.setter
+    def expires_at(self, value):
+        self.response_deadline = value
+
+    @property
+    def expires_soon(self):
+        if not self.response_deadline:
+            return False
+        return self.response_deadline <= (timezone.localdate() + timezone.timedelta(days=14))
+
+    @property
+    def is_expired(self):
+        if not self.response_deadline:
+            return False
+        return self.response_deadline < timezone.localdate()
+
+    def clean(self):
+        if self.offer_document_id and self.application_id and self.application.student_id != self.offer_document.student_id:
+            raise ValidationError('Offer document must belong to the same student profile as the application.')
+        if self.tuition_fee is not None and self.tuition_fee < 0:
+            raise ValidationError('Tuition fee cannot be negative.')
+        if self.deposit_amount is not None and self.deposit_amount < 0:
+            raise ValidationError('Deposit amount cannot be negative.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean(exclude=['created_at', 'updated_at'])
+        super().save(*args, **kwargs)
+        if self.is_current:
+            ApplicationOffer.objects.filter(
+                application=self.application,
+                is_current=True,
+            ).exclude(pk=self.pk).update(is_current=False)
+
+    def __str__(self):
+        return f"{self.application} - {self.get_offer_type_display()} ({self.get_acceptance_status_display()})"
+
+    class Meta:
+        ordering = ['-received_date', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['application', 'offer_code'],
+                condition=models.Q(offer_code__gt=''),
+                name='unique_application_offer_code',
+            ),
+        ]
+
+
+class ApplicationTimelineEvent(models.Model):
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='timeline_events',
+    )
+    event_type = models.CharField(max_length=50)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='application_timeline_events',
+    )
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    def __str__(self):
+        return f"{self.title} — {self.application}"
+
+    class Meta:
+        ordering = ['created_at', 'id']
 
 
 class ProcessStep(models.Model):

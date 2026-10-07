@@ -15,8 +15,10 @@ from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
     DEFAULT_CHECKLIST_TEMPLATE, _get_default_checklist,
-    CounsellingNote, FollowUp, Task, Appointment, Application,
-    ApplicationWorkflowProgress, CountryWorkflowStep
+    CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer,
+    ApplicationTimelineEvent,
+    ApplicationWorkflowProgress, CountryWorkflowStep,
+    ApplicationDocumentRequirement, CountryDocumentTemplate
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -27,7 +29,9 @@ from .serializers import (
     StudentProfileUpdateSerializer, StudentEnrollmentSerializer,
     ProcessStepSerializer, PaymentSerializer, VideoTestimonialSerializer, StudentDocumentSerializer,
     CounsellingNoteSerializer, FollowUpSerializer, TaskSerializer, AppointmentSerializer,
-    ApplicationSerializer
+    ApplicationSerializer, ApplicationOfferSerializer,
+    ApplicationTimelineEventSerializer, ApplicationTimelineEventCreateSerializer,
+    ApplicationDocumentRequirementSerializer
 )
 from . import cloudinary_service
 from .cloudinary_service import (
@@ -1721,6 +1725,44 @@ def upload_student_document(request):
         except StudentProfile.DoesNotExist:
             return Response({'error': 'Student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+    application_requirement = None
+    application_requirement_id = request.data.get('application_requirement_id')
+    if application_requirement_id:
+        try:
+            application_requirement = ApplicationDocumentRequirement.objects.select_related(
+                'application', 'template', 'student_document'
+            ).get(pk=application_requirement_id)
+        except (ApplicationDocumentRequirement.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Application document requirement not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if application_requirement.application.student_id != student.id:
+            return Response({'error': 'Application document requirement not found.'}, status=status.HTTP_404_NOT_FOUND)
+        active_template = CountryDocumentTemplate.objects.filter(
+            country_id=application_requirement.application.country_id,
+            active=True,
+        ).first()
+        if (
+            not active_template
+            or active_template.id != application_requirement.template_id
+            or not application_requirement.template.active
+        ):
+            return Response(
+                {'error': 'This requirement is not part of the application country active checklist.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        requested_document_type = request.data.get('document_type', '').strip()
+        if requested_document_type and requested_document_type != application_requirement.document_type:
+            return Response(
+                {'error': 'Document type does not match the selected application requirement.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        current_document = application_requirement.student_document
+        if current_document and current_document.verification_status != 'rejected':
+            return Response(
+                {'error': 'A document is already submitted for this requirement.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        document_type = application_requirement.document_type
+
     # 1. File format validation (PDF, JPG, JPEG, PNG)
     ext = os.path.splitext(doc_file.name)[1].lower()
     allowed_exts = ['.pdf', '.jpg', '.jpeg', '.png']
@@ -1760,6 +1802,11 @@ def upload_student_document(request):
         uploaded_by=request.user,
         verification_status='pending'
     )
+
+    if application_requirement:
+        application_requirement.student_document = doc
+        application_requirement._timeline_actor = request.user
+        application_requirement.save(update_fields=['student_document', 'updated_at'])
 
     return Response(StudentDocumentSerializer(doc).data, status=status.HTTP_201_CREATED)
 
@@ -2281,7 +2328,7 @@ def manage_student_applications(request, student_id):
             except Course.DoesNotExist:
                 return Response({'error': 'Selected course does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = ApplicationSerializer(data=data)
+        serializer = ApplicationSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             app = serializer.save()
 
@@ -2361,7 +2408,13 @@ def manage_application_detail(request, pk):
             except Course.DoesNotExist:
                 return Response({'error': 'Selected course does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = ApplicationSerializer(app, data=data, partial=(request.method == 'PATCH'))
+        app._timeline_actor = request.user
+        serializer = ApplicationSerializer(
+            app,
+            data=data,
+            partial=(request.method == 'PATCH'),
+            context={'request': request},
+        )
         if serializer.is_valid():
             updated_app = serializer.save()
             return Response(ApplicationSerializer(updated_app).data)
@@ -2376,6 +2429,286 @@ def manage_application_detail(request, pk):
 
         app.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _can_access_application(request, application):
+    if (
+        request.user.is_superuser
+        or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    ):
+        return True
+    return StudentProfile.objects.filter(
+        pk=application.student_id,
+        user=request.user,
+    ).exists()
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def application_timeline(request, pk):
+    try:
+        application = Application.objects.select_related('student').get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    is_staff_or_admin = (
+        request.user.is_superuser
+        or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    )
+    if request.method == 'GET':
+        events = ApplicationTimelineEvent.objects.filter(
+            application=application,
+        ).select_related('actor').order_by('created_at', 'id')
+        return Response(
+            ApplicationTimelineEventSerializer(events, many=True).data
+        )
+
+    if not is_staff_or_admin:
+        return Response(
+            {'error': 'Students are not authorized to add timeline events.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = ApplicationTimelineEventCreateSerializer(data=request.data)
+    if serializer.is_valid():
+        event = serializer.save(
+            application=application,
+            event_type='manual',
+            actor=request.user,
+        )
+        return Response(
+            ApplicationTimelineEventSerializer(event).data,
+            status=status.HTTP_201_CREATED,
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def manage_application_offers(request, pk):
+    try:
+        application = Application.objects.select_related('student', 'student__user').get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+
+    if request.method == 'GET':
+        offers = application.offers.select_related('offer_document', 'application__student').all()
+        return Response(ApplicationOfferSerializer(offers, many=True, context={'request': request}).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to create application offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    data = request.data.copy()
+    data['application'] = application.pk
+    serializer = ApplicationOfferSerializer(data=data, context={'request': request})
+    if serializer.is_valid():
+        offer = serializer.save()
+        return Response(ApplicationOfferSerializer(offer, context={'request': request}).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_application_offer_detail(request, pk, offer_id):
+    try:
+        application = Application.objects.select_related('student', 'student__user').get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        offer = application.offers.select_related('offer_document').get(pk=offer_id)
+    except ApplicationOffer.DoesNotExist:
+        return Response({'error': 'Offer not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+
+    if request.method == 'GET':
+        return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to update application offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'PATCH':
+        offer._timeline_actor = request.user
+        serializer = ApplicationOfferSerializer(offer, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            updated_offer = serializer.save()
+            return Response(ApplicationOfferSerializer(updated_offer, context={'request': request}).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    offer.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_offer_detail_by_id(request, offer_id):
+    try:
+        offer = ApplicationOffer.objects.select_related('application', 'application__student', 'offer_document').get(pk=offer_id)
+    except ApplicationOffer.DoesNotExist:
+        return Response({'error': 'Offer not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, offer.application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    is_staff_or_admin = (
+        request.user.is_superuser or
+        request.user.is_staff or
+        request.user.groups.filter(name='Staff').exists()
+    )
+
+    if request.method == 'GET':
+        return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
+
+    if not is_staff_or_admin:
+        return Response({'error': 'Students are not authorized to update application offers.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'PATCH':
+        serializer = ApplicationOfferSerializer(offer, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            updated_offer = serializer.save()
+            return Response(ApplicationOfferSerializer(updated_offer, context={'request': request}).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    offer.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def application_document_checklist(request, pk):
+    try:
+        application = Application.objects.select_related('country').get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    template = CountryDocumentTemplate.objects.filter(
+        country_id=application.country_id,
+        active=True,
+    ).first() if application.country_id else None
+    if not template:
+        return Response({
+            'application': application.id,
+            'template_name': None,
+            'status': 'no_template',
+            'requirements': [],
+        })
+
+    application.ensure_document_requirements()
+    requirements = application.document_requirements.filter(
+        template=template,
+    ).select_related('student_document')
+    return Response({
+        'application': application.id,
+        'template_name': template.name,
+        'status': 'available',
+        'requirements': ApplicationDocumentRequirementSerializer(
+            requirements,
+            many=True,
+            context={'request': request},
+        ).data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def link_application_document(request, pk, requirement_id):
+    try:
+        application = Application.objects.get(pk=pk)
+    except Application.DoesNotExist:
+        return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not _can_access_application(request, application):
+        return Response(
+            {'error': 'You do not have permission to access this application.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    template = CountryDocumentTemplate.objects.filter(
+        country_id=application.country_id,
+        active=True,
+    ).first() if application.country_id else None
+    if not template:
+        return Response(
+            {'error': 'This application has no active document checklist.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        requirement = ApplicationDocumentRequirement.objects.select_related(
+            'student_document'
+        ).get(
+            pk=requirement_id,
+            application=application,
+            template=template,
+        )
+        document_id = request.data.get('student_document_id')
+        document = StudentDocument.objects.get(
+            pk=document_id,
+            student_id=application.student_id,
+        )
+    except ApplicationDocumentRequirement.DoesNotExist:
+        return Response({'error': 'Application document requirement not found.'}, status=status.HTTP_404_NOT_FOUND)
+    except (StudentDocument.DoesNotExist, ValueError, TypeError):
+        return Response({'error': 'Student document not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if document.document_type != requirement.document_type:
+        return Response(
+            {'error': 'Student document type does not match this application requirement.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if requirement.student_document_id == document.id:
+        return Response(ApplicationDocumentRequirementSerializer(requirement).data)
+    current_document = requirement.student_document
+    if current_document and current_document.verification_status != 'rejected':
+        return Response(
+            {'error': 'A document is already submitted for this requirement.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    requirement.student_document = document
+    requirement._timeline_actor = request.user
+    requirement.save(update_fields=['student_document', 'updated_at'])
+    return Response(ApplicationDocumentRequirementSerializer(requirement).data)
 
 
 @api_view(['POST'])

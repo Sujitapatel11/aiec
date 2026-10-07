@@ -1,8 +1,9 @@
 from django.contrib import admin
 from .models import (
     Lead, Questionnaire, Country, Course,
-    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application,
+    StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application, ApplicationOffer,
     CountryWorkflow, CountryWorkflowStep, ApplicationWorkflowProgress,
+    CountryDocumentTemplate, CountryDocumentRequirement,
 )
 
 
@@ -120,6 +121,29 @@ class ApplicationWorkflowProgressAdmin(admin.ModelAdmin):
     list_select_related = ['application', 'workflow_step', 'completed_by']
 
 
+class CountryDocumentRequirementInline(admin.TabularInline):
+    model = CountryDocumentRequirement
+    extra = 0
+    ordering = ['order']
+
+
+@admin.register(CountryDocumentTemplate)
+class CountryDocumentTemplateAdmin(admin.ModelAdmin):
+    list_display = ['country', 'name', 'active', 'updated_at']
+    list_filter = ['active', 'country']
+    search_fields = ['country__name', 'name']
+    list_select_related = ['country']
+    inlines = [CountryDocumentRequirementInline]
+
+
+@admin.register(CountryDocumentRequirement)
+class CountryDocumentRequirementAdmin(admin.ModelAdmin):
+    list_display = ['template', 'order', 'document_type', 'label', 'required']
+    list_filter = ['template__country', 'required']
+    search_fields = ['template__name', 'template__country__name', 'document_type', 'label']
+    list_select_related = ['template', 'template__country']
+
+
 @admin.register(StudentIdSequence)
 class StudentIdSequenceAdmin(admin.ModelAdmin):
     list_display = ['year', 'last_number']
@@ -160,3 +184,20 @@ class StudentDocumentAdmin(admin.ModelAdmin):
     search_fields = ['student__full_name', 'student__student_id', 'file_name']
     readonly_fields = ['file_url', 'public_id', 'uploaded_at', 'verified_at']
     list_select_related = ['student', 'uploaded_by', 'verified_by']
+
+
+@admin.register(ApplicationOffer)
+class ApplicationOfferAdmin(admin.ModelAdmin):
+    list_display = [
+        'application', 'offer_type', 'acceptance_status', 'received_date',
+        'response_deadline', 'tuition_fee', 'deposit_amount', 'deposit_deadline',
+        'is_current', 'updated_at',
+    ]
+    list_filter = ['offer_type', 'acceptance_status', 'is_current']
+    search_fields = [
+        'application__university_name', 'application__course_name',
+        'application__student__full_name', 'application__student__student_id',
+        'offer_code',
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    list_select_related = ['application', 'application__student', 'offer_document']

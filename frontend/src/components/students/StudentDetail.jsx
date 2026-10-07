@@ -41,9 +41,15 @@ import {
   completeApplicationWorkflowStep,
   deleteStudentApplication,
   getApplicationCountries,
+  getApplicationDocumentChecklist,
   getCourses,
   getStudentApplications,
+  linkApplicationDocument,
   updateStudentApplication,
+  createApplicationOffer,
+  updateApplicationOffer,
+  deleteApplicationOffer,
+  createApplicationTimelineEvent,
 } from '../../api'
 import CounsellingNotes from '../counselling/CounsellingNotes'
 import FollowUpList from '../counselling/FollowUpList'
@@ -173,7 +179,107 @@ export default function StudentDetail({
   const [applicationError, setApplicationError] = useState('')
   const [updatingApplicationId, setUpdatingApplicationId] = useState(null)
   const [updatingWorkflowStepId, setUpdatingWorkflowStepId] = useState(null)
+  const [selectedApplicationDocuments, setSelectedApplicationDocuments] = useState({})
+  const [linkingDocumentKey, setLinkingDocumentKey] = useState(null)
   const canManageApplicationWorkflow = isAdmin || localStorage.getItem('aiec_role') === 'staff'
+
+  const [activeOfferApp, setActiveOfferApp] = useState(null)
+  const [editingOffer, setEditingOffer] = useState(null)
+  const [offerFormOpen, setOfferFormOpen] = useState(false)
+  const [offerFormLoading, setOfferFormLoading] = useState(false)
+  const [offerFormError, setOfferFormError] = useState('')
+  const [timelineFormApplicationId, setTimelineFormApplicationId] = useState(null)
+  const [timelineTitle, setTimelineTitle] = useState('')
+  const [timelineDescription, setTimelineDescription] = useState('')
+  const [timelineSaving, setTimelineSaving] = useState(false)
+  const [timelineError, setTimelineError] = useState('')
+  const [offerFormData, setOfferFormData] = useState({
+    offer_type: 'conditional',
+    acceptance_status: 'pending',
+    received_date: '',
+    response_deadline: '',
+    tuition_fee: '0.00',
+    deposit_amount: '0.00',
+    deposit_deadline: '',
+    currency: 'USD',
+    conditions: '',
+    notes: '',
+    offer_document: '',
+  })
+
+  const startOfferForm = (app, offer = null) => {
+    setActiveOfferApp(app)
+    setEditingOffer(offer)
+    setOfferFormError('')
+    if (offer) {
+      setOfferFormData({
+        offer_type: offer.offer_type || 'conditional',
+        acceptance_status: offer.acceptance_status || offer.status || 'pending',
+        received_date: offer.received_date || '',
+        response_deadline: offer.response_deadline || '',
+        tuition_fee: offer.tuition_fee ? String(offer.tuition_fee) : '0.00',
+        deposit_amount: offer.deposit_amount ? String(offer.deposit_amount) : '0.00',
+        deposit_deadline: offer.deposit_deadline || '',
+        currency: offer.currency || 'USD',
+        conditions: offer.conditions || '',
+        notes: offer.notes || '',
+        offer_document: offer.offer_document || offer.offer_document_detail?.id || '',
+      })
+    } else {
+      setOfferFormData({
+        offer_type: 'conditional',
+        acceptance_status: 'pending',
+        received_date: '',
+        response_deadline: '',
+        tuition_fee: '0.00',
+        deposit_amount: '0.00',
+        deposit_deadline: '',
+        currency: 'USD',
+        conditions: '',
+        notes: '',
+        offer_document: '',
+      })
+    }
+    setOfferFormOpen(true)
+  }
+
+  const handleOfferSubmit = async (e) => {
+    e.preventDefault()
+    if (!activeOfferApp) return
+    setOfferFormLoading(true)
+    setOfferFormError('')
+
+    const payload = {
+      ...offerFormData,
+      offer_document: offerFormData.offer_document ? Number(offerFormData.offer_document) : null,
+    }
+
+    try {
+      if (editingOffer) {
+        await updateApplicationOffer(activeOfferApp.id, editingOffer.id, payload)
+      } else {
+        await createApplicationOffer(activeOfferApp.id, payload)
+      }
+      setOfferFormOpen(false)
+      const { data } = await getStudentApplications(student.id)
+      setApplications(Array.isArray(data) ? data : data.results || [])
+    } catch (err) {
+      setOfferFormError(err.response?.data?.detail || err.response?.data?.offer_document?.[0] || 'Failed to save offer.')
+    } finally {
+      setOfferFormLoading(false)
+    }
+  }
+
+  const handleOfferDelete = async (app, offerId) => {
+    if (!window.confirm('Are you sure you want to delete this offer?')) return
+    try {
+      await deleteApplicationOffer(app.id, offerId)
+      const { data } = await getStudentApplications(student.id)
+      setApplications(Array.isArray(data) ? data : data.results || [])
+    } catch (err) {
+      alert('Could not delete offer.')
+    }
+  }
 
   useEffect(() => {
     setApplications(student?.applications || [])
@@ -363,6 +469,36 @@ export default function StudentDetail({
     }
   }
 
+  const refreshApplicationChecklist = async (applicationId) => {
+    const { data } = await getApplicationDocumentChecklist(applicationId)
+    setApplications(current => current.map(application => (
+      application.id === applicationId
+        ? { ...application, document_checklist: data }
+        : application
+    )))
+  }
+
+  const handleLinkApplicationDocument = async (application, requirement) => {
+    const key = `${application.id}:${requirement.id}`
+    const documentId = selectedApplicationDocuments[key]
+    if (!documentId) return
+    setLinkingDocumentKey(key)
+    setApplicationError('')
+    try {
+      await linkApplicationDocument(application.id, requirement.id, documentId)
+      await refreshApplicationChecklist(application.id)
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      setApplicationError(
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        'Could not link the student document.'
+      )
+    } finally {
+      setLinkingDocumentKey(null)
+    }
+  }
+
   const handleApplicationDelete = async (application) => {
     if (!isAdmin || !window.confirm(`Delete the application to ${application.university_name}?`)) return
     setApplicationError('')
@@ -372,6 +508,39 @@ export default function StudentDetail({
       if (onRefresh) onRefresh()
     } catch (err) {
       setApplicationError(err.response?.data?.detail || 'Could not delete application.')
+    }
+  }
+
+  const handleTimelineSubmit = async (event, application) => {
+    event.preventDefault()
+    setTimelineError('')
+    setTimelineSaving(true)
+    try {
+      const { data } = await createApplicationTimelineEvent(application.id, {
+        title: timelineTitle,
+        description: timelineDescription,
+      })
+      setApplications(current => current.map(item => (
+        item.id === application.id
+          ? {
+              ...item,
+              timeline_events: [...(item.timeline_events || []), data].sort(
+                (left, right) => new Date(left.created_at) - new Date(right.created_at)
+              ),
+            }
+          : item
+      )))
+      setTimelineTitle('')
+      setTimelineDescription('')
+      setTimelineFormApplicationId(null)
+    } catch (err) {
+      setTimelineError(
+        err.response?.data?.detail ||
+        err.response?.data?.title?.[0] ||
+        'Could not add the timeline entry.'
+      )
+    } finally {
+      setTimelineSaving(false)
     }
   }
 
@@ -744,6 +913,303 @@ export default function StudentDetail({
                           </ol>
                         </div>
                       )}
+                      {application.document_checklist?.status === 'available' ? (
+                        <div className="border-t border-slate-100 pt-3">
+                          {(() => {
+                            const requirements = application.document_checklist.requirements || []
+                            const requiredRequirements = requirements.filter(item => item.required)
+                            const verifiedRequired = requiredRequirements.filter(item => item.status === 'verified').length
+                            return (
+                              <>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <h5 className="text-xs font-bold text-slate-700">Application Documents</h5>
+                                  <span className="text-[11px] text-slate-500">
+                                    {verifiedRequired} / {requiredRequirements.length} required verified
+                                  </span>
+                                </div>
+                                <ol className="space-y-3">
+                                  {requirements.map(requirement => {
+                                    const linkedDocument = requirement.document
+                                    const matchingDocuments = (student.documents || []).filter(
+                                      document => document.document_type === requirement.document_type
+                                    )
+                                    const key = `${application.id}:${requirement.id}`
+                                    const badge = {
+                                      missing: ['○', 'Missing', 'text-slate-500'],
+                                      submitted: ['⏳', 'Pending Review', 'text-amber-700'],
+                                      verified: ['✅', 'Verified', 'text-emerald-700'],
+                                      rejected: ['❌', 'Rejected', 'text-red-700'],
+                                    }[requirement.status] || ['○', requirement.status, 'text-slate-500']
+                                    return (
+                                      <li key={requirement.id} className="rounded-xl bg-slate-50 p-3 text-xs">
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                          <div>
+                                            <p className="font-semibold text-slate-800">
+                                              {requirement.label}
+                                              {!requirement.required && <span className="ml-1 text-slate-400">(Optional)</span>}
+                                            </p>
+                                            {requirement.description && (
+                                              <p className="mt-0.5 text-slate-500">{requirement.description}</p>
+                                            )}
+                                          </div>
+                                          <span className={`font-bold ${badge[2]}`}>{badge[0]} {badge[1]}</span>
+                                        </div>
+                                        {linkedDocument && (
+                                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <a
+                                              href={linkedDocument.file_url}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="font-semibold text-blue-700 underline"
+                                            >
+                                              {linkedDocument.file_name || 'View submitted document'}
+                                            </a>
+                                            {canManageApplicationWorkflow && requirement.status !== 'verified' && (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => onVerifyDocument(linkedDocument.id, 'verified')}
+                                                  className="font-bold text-emerald-700 hover:text-emerald-900"
+                                                >
+                                                  Verify
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => onRejectDocument(linkedDocument)}
+                                                  className="font-bold text-red-700 hover:text-red-900"
+                                                >
+                                                  Reject
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                        {requirement.status === 'rejected' && linkedDocument?.rejection_reason && (
+                                          <p className="mt-2 text-red-700">
+                                            Rejection reason: {linkedDocument.rejection_reason}
+                                          </p>
+                                        )}
+                                        {canManageApplicationWorkflow && ['missing', 'rejected'].includes(requirement.status) && matchingDocuments.length > 0 && (
+                                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <select
+                                              aria-label={`Existing ${requirement.label} document`}
+                                              value={selectedApplicationDocuments[key] || ''}
+                                              onChange={event => setSelectedApplicationDocuments(current => ({
+                                                ...current,
+                                                [key]: event.target.value,
+                                              }))}
+                                              className="rounded-lg border border-slate-200 bg-white px-2 py-1"
+                                            >
+                                              <option value="">Link existing student document</option>
+                                              {matchingDocuments.map(document => (
+                                                <option key={document.id} value={document.id}>
+                                                  {document.file_name || `Document ${document.id}`} ({document.verification_status})
+                                                </option>
+                                              ))}
+                                            </select>
+                                            <button
+                                              type="button"
+                                              disabled={!selectedApplicationDocuments[key] || linkingDocumentKey === key}
+                                              onClick={() => handleLinkApplicationDocument(application, requirement)}
+                                              className="font-bold text-blue-700 disabled:opacity-50"
+                                            >
+                                              {linkingDocumentKey === key ? 'Linking…' : 'Link'}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </li>
+                                    )
+                                  })}
+                                </ol>
+                              </>
+                            )
+                          })()}
+                        </div>
+                      ) : null}
+                      {/* ── OFFERS TRACKING SECTION ── */}
+                      <div className="border-t border-slate-100 pt-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-bold text-slate-700">University Offers</h5>
+                          {canManageApplicationWorkflow && (
+                            <button
+                              type="button"
+                              onClick={() => startOfferForm(application)}
+                              className="text-[11px] font-bold text-blue-700 hover:text-blue-900"
+                            >
+                              + Add Offer
+                            </button>
+                          )}
+                        </div>
+                        {(!application.offers || application.offers.length === 0) ? (
+                          <p className="text-[11px] text-slate-400 italic">No offers logged yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {application.offers.map(offer => (
+                              <div key={offer.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-slate-900">
+                                      {offer.offer_type === 'conditional' ? 'Conditional Offer' :
+                                       offer.offer_type === 'unconditional' ? 'Unconditional Offer' :
+                                       offer.offer_type === 'deferred' ? 'Deferred Offer' : offer.offer_type}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      offer.acceptance_status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                                      offer.acceptance_status === 'declined' ? 'bg-red-100 text-red-800' :
+                                      offer.acceptance_status === 'expired' ? 'bg-slate-200 text-slate-700' :
+                                      'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {(offer.acceptance_status || offer.status || 'PENDING').toUpperCase()}
+                                    </span>
+                                  </div>
+                                  {canManageApplicationWorkflow && (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => startOfferForm(application, offer)}
+                                        className="font-bold text-slate-600 hover:text-slate-900 text-[11px]"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOfferDelete(application, offer.id)}
+                                        className="font-bold text-red-600 hover:text-red-800 text-[11px]"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600">
+                                  {offer.received_date && (
+                                    <div>
+                                      <span className="text-slate-400 block text-[10px]">Received</span>
+                                      <span className="font-semibold">{formatApplicationDate(offer.received_date)}</span>
+                                    </div>
+                                  )}
+                                  {offer.response_deadline && (
+                                    <div>
+                                      <span className="text-slate-400 block text-[10px]">Response Deadline</span>
+                                      <span className="font-semibold text-amber-800">{formatApplicationDate(offer.response_deadline)}</span>
+                                    </div>
+                                  )}
+                                  {Number(offer.tuition_fee) > 0 && (
+                                    <div>
+                                      <span className="text-slate-400 block text-[10px]">Tuition Fee</span>
+                                      <span className="font-semibold">{offer.currency || 'USD'} {Number(offer.tuition_fee).toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                  {Number(offer.deposit_amount) > 0 && (
+                                    <div>
+                                      <span className="text-slate-400 block text-[10px]">Deposit Amount</span>
+                                      <span className="font-semibold">{offer.currency || 'USD'} {Number(offer.deposit_amount).toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                  {offer.deposit_deadline && (
+                                    <div>
+                                      <span className="text-slate-400 block text-[10px]">Deposit Deadline</span>
+                                      <span className="font-semibold">{formatApplicationDate(offer.deposit_deadline)}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {offer.conditions && (
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px]">Conditions</span>
+                                    <p className="text-slate-700 whitespace-pre-line text-xs">{offer.conditions}</p>
+                                  </div>
+                                )}
+
+                                {offer.offer_document_detail && (
+                                  <div className="pt-1">
+                                    <a
+                                      href={offer.offer_document_detail.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="font-bold text-blue-700 hover:underline flex items-center gap-1"
+                                    >
+                                      📄 Offer Letter ({offer.offer_document_detail.file_name})
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <section className="border-t border-slate-100 pt-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <h5 className="text-xs font-bold text-slate-700">Application Timeline</h5>
+                          {canManageApplicationWorkflow && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTimelineError('')
+                                setTimelineFormApplicationId(
+                                  timelineFormApplicationId === application.id ? null : application.id
+                                )
+                              }}
+                              className="text-[11px] font-bold text-blue-700 hover:text-blue-900"
+                            >
+                              {timelineFormApplicationId === application.id ? 'Cancel' : '+ Add Entry'}
+                            </button>
+                          )}
+                        </div>
+                        {timelineError && timelineFormApplicationId === application.id && (
+                          <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{timelineError}</p>
+                        )}
+                        {timelineFormApplicationId === application.id && (
+                          <form onSubmit={event => handleTimelineSubmit(event, application)} className="space-y-2 rounded-xl bg-slate-50 p-3">
+                            <label className="block text-[11px] font-semibold text-slate-600">
+                              Title
+                              <input
+                                required
+                                maxLength={200}
+                                value={timelineTitle}
+                                onChange={event => setTimelineTitle(event.target.value)}
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                              />
+                            </label>
+                            <label className="block text-[11px] font-semibold text-slate-600">
+                              Description
+                              <textarea
+                                value={timelineDescription}
+                                onChange={event => setTimelineDescription(event.target.value)}
+                                rows={2}
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              disabled={timelineSaving}
+                              className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                            >
+                              {timelineSaving ? 'Saving…' : 'Add Timeline Entry'}
+                            </button>
+                          </form>
+                        )}
+                        {!application.timeline_events?.length ? (
+                          <p className="text-[11px] italic text-slate-400">No timeline events recorded yet.</p>
+                        ) : (
+                          <ol className="space-y-3 border-l border-slate-200 pl-3">
+                            {application.timeline_events.map(item => (
+                              <li key={item.id} className="relative text-xs">
+                                <span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full bg-amber-400" />
+                                <p className="font-bold text-slate-800">{item.title}</p>
+                                {item.description && <p className="mt-0.5 whitespace-pre-line text-slate-600">{item.description}</p>}
+                                <p className="mt-1 text-[10px] text-slate-400">
+                                  {new Date(item.created_at).toLocaleString()}
+                                  {item.actor_name ? ` · ${item.actor_name}` : ''}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </section>
+
                       {application.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{application.notes}</p>}
                       <div className="flex gap-2 border-t border-gray-100 pt-2">
                         <button onClick={() => startApplicationForm(application)} className="text-xs font-bold text-slate-700 hover:text-slate-900">Edit</button>
@@ -1001,6 +1467,182 @@ export default function StudentDetail({
 
         </div>
       </div>
+
+      {/* ── OFFER MODAL ────────────────────────────────────── */}
+      {offerFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                {editingOffer ? 'Edit University Offer' : 'Add University Offer'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setOfferFormOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            {offerFormError && (
+              <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                {offerFormError}
+              </p>
+            )}
+            <form onSubmit={handleOfferSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Offer Type</span>
+                  <select
+                    value={offerFormData.offer_type}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, offer_type: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2 bg-white font-semibold"
+                  >
+                    <option value="conditional">Conditional Offer</option>
+                    <option value="unconditional">Unconditional Offer</option>
+                    <option value="deferred">Deferred Offer</option>
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Acceptance Status</span>
+                  <select
+                    value={offerFormData.acceptance_status}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, acceptance_status: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2 bg-white font-semibold"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="declined">Declined</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Received Date</span>
+                  <input
+                    type="date"
+                    value={offerFormData.received_date}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, received_date: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Response Deadline</span>
+                  <input
+                    type="date"
+                    value={offerFormData.response_deadline}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, response_deadline: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <label className="block space-y-1 col-span-2">
+                  <span className="font-bold text-slate-700">Tuition Fee</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={offerFormData.tuition_fee}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, tuition_fee: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Currency</span>
+                  <input
+                    type="text"
+                    value={offerFormData.currency}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, currency: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2 uppercase"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Deposit Amount</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={offerFormData.deposit_amount}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, deposit_amount: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="font-bold text-slate-700">Deposit Deadline</span>
+                  <input
+                    type="date"
+                    value={offerFormData.deposit_deadline}
+                    onChange={e => setOfferFormData(prev => ({ ...prev, deposit_deadline: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 p-2"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="font-bold text-slate-700">Conditions</span>
+                <textarea
+                  rows="2"
+                  value={offerFormData.conditions}
+                  onChange={e => setOfferFormData(prev => ({ ...prev, conditions: e.target.value }))}
+                  placeholder="e.g. IELTS 6.5, Final Degree Certificate"
+                  className="w-full rounded-lg border border-slate-200 p-2"
+                />
+              </label>
+
+              <label className="block space-y-1">
+                <span className="font-bold text-slate-700">Offer Document (Letter)</span>
+                <select
+                  value={offerFormData.offer_document}
+                  onChange={e => setOfferFormData(prev => ({ ...prev, offer_document: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 p-2 bg-white"
+                >
+                  <option value="">No document attached</option>
+                  {(student.documents || []).map(doc => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.file_name || `Document ${doc.id}`} ({doc.document_type})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-1">
+                <span className="font-bold text-slate-700">Internal Staff Notes</span>
+                <textarea
+                  rows="2"
+                  value={offerFormData.notes}
+                  onChange={e => setOfferFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Staff only internal notes"
+                  className="w-full rounded-lg border border-slate-200 p-2"
+                />
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setOfferFormOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={offerFormLoading}
+                  className="px-4 py-2 rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {offerFormLoading ? 'Saving...' : editingOffer ? 'Save Offer' : 'Create Offer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { getStudentPortalMe, uploadStudentDocument } from '../api'
+import {
+  getStudentPortalMe,
+  linkApplicationDocument,
+  uploadStudentDocument,
+} from '../api'
 
 const REQUIRED_DOC_TYPES = [
   { type: 'Passport', label: 'Valid Passport', desc: 'Front & back bio pages' },
@@ -87,11 +91,13 @@ export default function StudentPortal() {
   const [uploadingDocType, setUploadingDocType] = useState(null)
   const [uploadNotice, setUploadNotice]         = useState('')
   const [uploadError, setUploadError]           = useState('')
+  const [selectedApplicationDocuments, setSelectedApplicationDocuments] = useState({})
 
-  const handleDocumentUpload = async (docType, file) => {
+  const handleDocumentUpload = async (docType, file, application = null, requirement = null) => {
     if (!file) return
     setUploadNotice('')
     setUploadError('')
+    const uploadKey = requirement ? `${application.id}:${requirement.id}` : docType
 
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
     if (!['.pdf', '.jpg', '.jpeg', '.png'].includes(ext)) {
@@ -109,11 +115,14 @@ export default function StudentPortal() {
     if (profile?.id) {
       formData.append('student_id', profile.id)
     }
+    if (requirement) {
+      formData.append('application_requirement_id', requirement.id)
+    }
 
-    setUploadingDocType(docType)
+    setUploadingDocType(uploadKey)
     try {
       await uploadStudentDocument(formData)
-      setUploadNotice(`${docType} document uploaded successfully!`)
+      setUploadNotice(`${requirement?.label || docType} document uploaded successfully!`)
       setTimeout(() => setUploadNotice(''), 4000)
       const res = await getStudentPortalMe()
       setProfile(res.data)
@@ -121,6 +130,21 @@ export default function StudentPortal() {
       setUploadError(err.response?.data?.error || `Failed to upload ${docType} document.`)
     } finally {
       setUploadingDocType(null)
+    }
+  }
+
+  const handleLinkApplicationDocument = async (application, requirement) => {
+    const key = `${application.id}:${requirement.id}`
+    const documentId = selectedApplicationDocuments[key]
+    if (!documentId) return
+    setUploadError('')
+    try {
+      await linkApplicationDocument(application.id, requirement.id, documentId)
+      const res = await getStudentPortalMe()
+      setProfile(res.data)
+      setUploadNotice(`${requirement.label} linked to this application.`)
+    } catch (err) {
+      setUploadError(err.response?.data?.error || 'Could not link the existing document.')
     }
   }
 
@@ -292,6 +316,16 @@ export default function StudentPortal() {
                 <h3 className="text-xl font-extrabold text-white">My University Applications</h3>
                 <p className="text-xs text-gray-400 mt-0.5">Application progress shared by your counselor</p>
               </div>
+              {uploadNotice && (
+                <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+                  {uploadNotice}
+                </p>
+              )}
+              {uploadError && (
+                <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+                  {uploadError}
+                </p>
+              )}
               {!profile.applications?.length ? (
                 <p className="text-sm text-gray-400">No university applications have been added yet.</p>
               ) : (
@@ -353,6 +387,212 @@ export default function StudentPortal() {
                           </ol>
                         </div>
                       )}
+                      {application.document_checklist?.status === 'available' ? (
+                        <div className="border-t border-white/10 pt-3">
+                          {(() => {
+                            const requirements = application.document_checklist.requirements || []
+                            const requiredRequirements = requirements.filter(item => item.required)
+                            const verifiedRequired = requiredRequirements.filter(item => item.status === 'verified').length
+                            return (
+                              <>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <h5 className="text-xs font-bold text-amber-300">Application Documents</h5>
+                                  <span className="text-[11px] text-gray-400">
+                                    {verifiedRequired} / {requiredRequirements.length} required verified
+                                  </span>
+                                </div>
+                                <ol className="space-y-3">
+                                  {requirements.map(requirement => {
+                                    const linkedDocument = requirement.document
+                                    const key = `${application.id}:${requirement.id}`
+                                    const isUploading = uploadingDocType === key
+                                    const matchingDocuments = (profile.documents || []).filter(
+                                      document => document.document_type === requirement.document_type
+                                    )
+                                    const badge = {
+                                      missing: ['○', 'Missing', 'text-gray-400'],
+                                      submitted: ['⏳', 'Pending Review', 'text-amber-300'],
+                                      verified: ['✅', 'Verified', 'text-emerald-300'],
+                                      rejected: ['❌', 'Rejected', 'text-red-300'],
+                                    }[requirement.status] || ['○', requirement.status, 'text-gray-400']
+                                    return (
+                                      <li key={requirement.id} className="rounded-xl bg-white/5 p-3 text-xs">
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                          <div>
+                                            <p className="font-semibold text-gray-100">
+                                              {requirement.label}
+                                              {!requirement.required && <span className="ml-1 text-gray-500">(Optional)</span>}
+                                            </p>
+                                            {requirement.description && (
+                                              <p className="mt-0.5 text-gray-400">{requirement.description}</p>
+                                            )}
+                                          </div>
+                                          <span className={`font-bold ${badge[2]}`}>{badge[0]} {badge[1]}</span>
+                                        </div>
+                                        {linkedDocument && (
+                                          <a
+                                            href={linkedDocument.file_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="mt-2 inline-block font-semibold text-blue-300 underline"
+                                          >
+                                            {linkedDocument.file_name || 'View submitted document'}
+                                          </a>
+                                        )}
+                                        {requirement.status === 'rejected' && linkedDocument?.rejection_reason && (
+                                          <p className="mt-2 text-red-300">
+                                            Rejection reason: {linkedDocument.rejection_reason}
+                                          </p>
+                                        )}
+                                        {['missing', 'rejected'].includes(requirement.status) && (
+                                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <label className="inline-flex cursor-pointer items-center rounded-lg bg-amber-400 px-3 py-1.5 font-bold text-slate-950">
+                                              {isUploading ? 'Uploading…' : linkedDocument ? 'Upload replacement' : 'Upload document'}
+                                              <input
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                disabled={isUploading}
+                                                className="sr-only"
+                                                onChange={event => {
+                                                  const file = event.target.files?.[0]
+                                                  if (file) handleDocumentUpload(
+                                                    requirement.document_type,
+                                                    file,
+                                                    application,
+                                                    requirement,
+                                                  )
+                                                  event.target.value = ''
+                                                }}
+                                              />
+                                            </label>
+                                            {matchingDocuments.length > 0 && (
+                                              <>
+                                                <select
+                                                  aria-label={`Existing ${requirement.label} document`}
+                                                  value={selectedApplicationDocuments[key] || ''}
+                                                  onChange={event => setSelectedApplicationDocuments(current => ({
+                                                    ...current,
+                                                    [key]: event.target.value,
+                                                  }))}
+                                                  className="max-w-full rounded-lg border border-white/20 bg-slate-900 px-2 py-1.5 text-gray-100"
+                                                >
+                                                  <option value="">Use an existing upload</option>
+                                                  {matchingDocuments.map(document => (
+                                                    <option key={document.id} value={document.id}>
+                                                      {document.file_name || `Document ${document.id}`} ({document.verification_status})
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                                <button
+                                                  type="button"
+                                                  disabled={!selectedApplicationDocuments[key]}
+                                                  onClick={() => handleLinkApplicationDocument(application, requirement)}
+                                                  className="font-bold text-blue-300 disabled:opacity-50"
+                                                >
+                                                  Link
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </li>
+                                    )
+                                  })}
+                                </ol>
+                              </>
+                            )
+                          })()}
+                        </div>
+                      ) : null}
+                      {/* ── OFFERS TRACKING SECTION (READ-ONLY) ── */}
+                      {application.offers?.length > 0 && (
+                        <div className="border-t border-white/10 pt-3 space-y-2">
+                          <h5 className="text-xs font-bold text-amber-300">University Offers</h5>
+                          <div className="space-y-2">
+                            {application.offers.map(offer => (
+                              <div key={offer.id} className="rounded-xl bg-white/5 border border-white/10 p-3 text-xs space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-bold text-emerald-300">
+                                    {offer.offer_type === 'conditional' ? 'Conditional Offer' :
+                                     offer.offer_type === 'unconditional' ? 'Unconditional Offer' :
+                                     offer.offer_type === 'deferred' ? 'Deferred Offer' : offer.offer_type}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-gray-200 uppercase">
+                                    {offer.acceptance_status || offer.status || 'PENDING'}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
+                                  {offer.received_date && (
+                                    <div>
+                                      <span className="block text-gray-500">Received</span>
+                                      <span>{new Date(offer.received_date).toLocaleDateString()}</span>
+                                    </div>
+                                  )}
+                                  {offer.response_deadline && (
+                                    <div>
+                                      <span className="block text-gray-500">Response Deadline</span>
+                                      <span className="text-amber-200">{new Date(offer.response_deadline).toLocaleDateString()}</span>
+                                    </div>
+                                  )}
+                                  {Number(offer.tuition_fee) > 0 && (
+                                    <div>
+                                      <span className="block text-gray-500">Tuition Fee</span>
+                                      <span>{offer.currency || 'USD'} {Number(offer.tuition_fee).toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                  {Number(offer.deposit_amount) > 0 && (
+                                    <div>
+                                      <span className="block text-gray-500">Deposit</span>
+                                      <span>{offer.currency || 'USD'} {Number(offer.deposit_amount).toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {offer.conditions && (
+                                  <div>
+                                    <span className="block text-gray-500 text-[10px]">Conditions</span>
+                                    <p className="text-gray-300 text-xs whitespace-pre-line">{offer.conditions}</p>
+                                  </div>
+                                )}
+
+                                {offer.offer_document_detail && (
+                                  <div className="pt-1">
+                                    <a
+                                      href={offer.offer_document_detail.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-amber-300 hover:underline flex items-center gap-1 font-semibold"
+                                    >
+                                      📄 View Offer Letter ({offer.offer_document_detail.file_name})
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <section className="border-t border-white/10 pt-3 space-y-2">
+                        <h5 className="text-xs font-bold text-amber-300">Application Timeline</h5>
+                        {!application.timeline_events?.length ? (
+                          <p className="text-xs text-gray-400">No timeline events have been recorded yet.</p>
+                        ) : (
+                          <ol className="space-y-3 border-l border-white/20 pl-3">
+                            {application.timeline_events.map(item => (
+                              <li key={item.id} className="relative text-xs">
+                                <span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full bg-amber-400" />
+                                <p className="font-bold text-gray-100">{item.title}</p>
+                                {item.description && <p className="mt-0.5 whitespace-pre-line text-gray-300">{item.description}</p>}
+                                <p className="mt-1 text-[10px] text-gray-500">
+                                  {new Date(item.created_at).toLocaleString()}
+                                  {item.actor_name ? ` · ${item.actor_name}` : ''}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </section>
                     </article>
                   ))}
                 </div>

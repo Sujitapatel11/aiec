@@ -82,6 +82,24 @@ export const deleteStudentApplication = (id)          => api.delete(`/applicatio
 export const getApplicationCountries = (params = {}) => api.get('/countries/', { params })
 export const completeApplicationWorkflowStep = (applicationId, stepId) =>
   api.post(`/applications/${applicationId}/workflow-steps/${stepId}/complete/`)
+export const getApplicationDocumentChecklist = (applicationId) =>
+  api.get(`/applications/${applicationId}/documents/`)
+export const linkApplicationDocument = (applicationId, requirementId, studentDocumentId) =>
+  api.post(`/applications/${applicationId}/documents/${requirementId}/link/`, {
+    student_document_id: studentDocumentId,
+  })
+export const getApplicationOffers = (applicationId) =>
+  api.get(`/applications/${applicationId}/offers/`)
+export const createApplicationOffer = (applicationId, data) =>
+  api.post(`/applications/${applicationId}/offers/`, data)
+export const updateApplicationOffer = (applicationId, offerId, data) =>
+  api.patch(`/applications/${applicationId}/offers/${offerId}/`, data)
+export const deleteApplicationOffer = (applicationId, offerId) =>
+  api.delete(`/applications/${applicationId}/offers/${offerId}/`)
+export const createApplicationTimelineEvent = (applicationId, data) =>
+  api.post(`/applications/${applicationId}/timeline/`, data)
+export const getApplicationTimeline = (applicationId) =>
+  api.get(`/applications/${applicationId}/timeline/`)
 
 // Phase 1.4 — Lead → Student conversion
 export const convertLeadToStudent = (leadId, data)   => api.post(`/leads/${leadId}/convert-to-student/`, data)

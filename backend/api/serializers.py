@@ -4,7 +4,9 @@ from django.utils import timezone
 from .models import (
     Lead, LeadActivity, Questionnaire, Country, Course,
     StudentProfile, ProcessStep, Payment, VideoTestimonial, StudentDocument,
-    CounsellingNote, FollowUp, Task, Appointment, Application,
+    CountryDocumentTemplate, ApplicationDocumentRequirement,
+    CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer,
+    ApplicationTimelineEvent,
     CountryWorkflowStep
 )
 
@@ -391,6 +393,122 @@ class ApplicationWorkflowStepSerializer(serializers.ModelSerializer):
         return None
 
 
+class ApplicationDocumentRequirementSerializer(serializers.ModelSerializer):
+    status = serializers.CharField(read_only=True)
+    document = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApplicationDocumentRequirement
+        fields = [
+            'id', 'document_type', 'label', 'description', 'required', 'order',
+            'status', 'document',
+        ]
+
+    def get_document(self, obj):
+        document = obj.student_document
+        if not document:
+            return None
+        result = {
+            'id': document.id,
+            'file_name': document.file_name,
+            'file_url': document.file_url,
+            'uploaded_at': document.uploaded_at,
+            'verification_status': document.verification_status,
+        }
+        if document.verification_status == 'rejected':
+            result['rejection_reason'] = document.rejection_reason
+        return result
+
+
+class ApplicationOfferSerializer(serializers.ModelSerializer):
+    offer_document_detail = serializers.SerializerMethodField()
+    application_status = serializers.CharField(source='application.status', read_only=True)
+    status = serializers.CharField(source='acceptance_status', read_only=True)
+    issued_at = serializers.DateField(source='received_date', read_only=True)
+    expires_at = serializers.DateField(source='response_deadline', read_only=True)
+
+    class Meta:
+        model = ApplicationOffer
+        fields = [
+            'id', 'application', 'application_status', 'offer_type',
+            'acceptance_status', 'status', 'received_date', 'issued_at',
+            'response_deadline', 'expires_at', 'tuition_fee', 'deposit_amount',
+            'deposit_deadline', 'currency', 'conditions', 'notes',
+            'offer_code', 'is_current', 'offer_document',
+            'offer_document_detail', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'application_status', 'status', 'issued_at', 'expires_at']
+
+    def get_offer_document_detail(self, obj):
+        if not obj.offer_document:
+            return None
+        return {
+            'id': obj.offer_document.id,
+            'document_type': obj.offer_document.document_type,
+            'file_name': obj.offer_document.file_name,
+            'file_url': obj.offer_document.file_url,
+            'verification_status': obj.offer_document.verification_status,
+        }
+
+    def validate(self, attrs):
+        application = attrs.get('application') or getattr(self.instance, 'application', None)
+        offer_document = attrs.get('offer_document') or getattr(self.instance, 'offer_document', None)
+        if application and offer_document and application.student_id != offer_document.student_id:
+            raise serializers.ValidationError({
+                'offer_document': 'Offer document must belong to the same student as the application.'
+            })
+        tuition_fee = attrs.get('tuition_fee')
+        if tuition_fee is not None and tuition_fee < 0:
+            raise serializers.ValidationError({'tuition_fee': 'Tuition fee cannot be negative.'})
+        deposit_amount = attrs.get('deposit_amount')
+        if deposit_amount is not None and deposit_amount < 0:
+            raise serializers.ValidationError({'deposit_amount': 'Deposit amount cannot be negative.'})
+        return attrs
+
+    def create(self, validated_data):
+        application = ApplicationOffer(**validated_data)
+        request = self.context.get('request')
+        application._timeline_actor = request.user if request and request.user.is_authenticated else None
+        application.save()
+        return application
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            is_staff_or_admin = (
+                request.user.is_superuser or
+                request.user.is_staff or
+                request.user.groups.filter(name='Staff').exists()
+            )
+            if not is_staff_or_admin:
+                data.pop('notes', None)
+        return data
+
+
+class ApplicationTimelineEventSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApplicationTimelineEvent
+        fields = [
+            'id', 'event_type', 'title', 'description',
+            'actor', 'actor_name', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_actor_name(self, obj):
+        if not obj.actor:
+            return None
+        return obj.actor.get_full_name() or obj.actor.username
+
+
+class ApplicationTimelineEventCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ApplicationTimelineEvent
+        fields = ['title', 'description']
+
+
 class ApplicationSerializer(serializers.ModelSerializer):
     STATUS_TRANSITIONS = {
         'draft': {'applied', 'withdrawn'},
@@ -411,6 +529,9 @@ class ApplicationSerializer(serializers.ModelSerializer):
     days_until_deadline = serializers.SerializerMethodField()
     workflow_name = serializers.SerializerMethodField()
     workflow_steps = serializers.SerializerMethodField()
+    document_checklist = serializers.SerializerMethodField()
+    offers = ApplicationOfferSerializer(many=True, read_only=True)
+    timeline_events = ApplicationTimelineEventSerializer(many=True, read_only=True)
 
     class Meta:
         model = Application
@@ -421,6 +542,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'status', 'intake', 'applied_date', 'deadline',
             'deadline_status', 'days_until_deadline', 'notes',
             'workflow_name', 'workflow_steps',
+            'document_checklist', 'offers', 'timeline_events',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'deadline_status', 'days_until_deadline']
@@ -467,21 +589,59 @@ class ApplicationSerializer(serializers.ModelSerializer):
             },
         ).data
 
+    def get_document_checklist(self, obj):
+        if obj.country_id:
+            template = CountryDocumentTemplate.objects.filter(
+                country_id=obj.country_id,
+                active=True,
+            ).first()
+        else:
+            template = None
+        if not template:
+            return {'template_name': None, 'status': 'no_template', 'requirements': []}
+
+        obj.ensure_document_requirements()
+        requirements = obj.document_requirements.filter(template=template).select_related(
+            'student_document'
+        )
+        return {
+            'template_name': template.name,
+            'status': 'available',
+            'requirements': ApplicationDocumentRequirementSerializer(
+                requirements,
+                many=True,
+                context=self.context,
+            ).data,
+        }
+
     def validate_status(self, value):
         valid = {c[0] for c in Application.APPLICATION_STATUS_CHOICES}
         if value not in valid:
             raise serializers.ValidationError(f"Invalid status. Must be one of: {', '.join(sorted(valid))}.")
         return value
 
+    def create(self, validated_data):
+        application = Application(**validated_data)
+        request = self.context.get('request')
+        application._timeline_actor = request.user if request and request.user.is_authenticated else None
+        application.save()
+        return application
+
     def validate(self, attrs):
-        if self.instance and self.instance.workflow_progress.exists():
+        if self.instance:
             country_changed = 'country' in attrs and attrs['country'] != self.instance.country
             country_name_changed = (
                 'country_name' in attrs
                 and attrs['country_name'].strip().casefold()
                 != self.instance.country_name.strip().casefold()
             )
-            if country_changed or country_name_changed:
+            has_workflow_progress = self.instance.workflow_progress.exists()
+            has_document_progress = self.instance.document_requirements.filter(
+                student_document__isnull=False
+            ).exists()
+            if (country_changed or country_name_changed) and (
+                has_workflow_progress or has_document_progress
+            ):
                 raise serializers.ValidationError({
                     'country': 'Country cannot be changed after application progress has started.'
                 })

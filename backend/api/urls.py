@@ -52,6 +52,15 @@ urlpatterns = [
     # Phase 2.1 — Student University Applications API
     path('students/<int:student_id>/applications/', views.manage_student_applications),
     path('applications/<int:pk>/', views.manage_application_detail),
+    path('applications/<int:pk>/timeline/', views.application_timeline),
+    path('applications/<int:pk>/offers/', views.manage_application_offers),
+    path('applications/<int:pk>/offers/<int:offer_id>/', views.manage_application_offer_detail),
+    path('offers/<int:offer_id>/', views.manage_offer_detail_by_id),
+    path('applications/<int:pk>/documents/', views.application_document_checklist),
+    path(
+        'applications/<int:pk>/documents/<int:requirement_id>/link/',
+        views.link_application_document,
+    ),
     path(
         'applications/<int:pk>/workflow-steps/<int:step_id>/complete/',
         views.complete_application_workflow_step,
