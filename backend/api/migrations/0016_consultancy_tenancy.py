@@ -1,4 +1,5 @@
 import django.db.models.deletion
+import api.models
 from django.conf import settings
 from django.db import migrations, models
 
@@ -80,7 +81,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='lead',
             name='consultancy',
-            field=models.ForeignKey(default=__import__('api.models', fromlist=['get_default_consultancy']).get_default_consultancy, on_delete=django.db.models.deletion.PROTECT, related_name='leads', to='api.consultancy'),
+            field=models.ForeignKey(default=api.models.get_default_consultancy, on_delete=django.db.models.deletion.PROTECT, related_name='leads', to='api.consultancy'),
         ),
         migrations.AlterField(
             model_name='studentprofile',
