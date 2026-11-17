@@ -1561,8 +1561,15 @@ def add_step_payment(request, step_id):
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
-        step = ProcessStep.objects.get(pk=step_id)
+        step = ProcessStep.objects.select_related('student').get(
+            pk=step_id, student__consultancy=consultancy
+        )
     except ProcessStep.DoesNotExist:
         return Response({'error': 'Process step not found.'}, status=404)
 
@@ -1765,11 +1772,16 @@ def upload_student_document(request):
         # Staff/Admin uploading
         if not target_student_id:
             return Response({'error': 'student_id is required for staff document upload.'}, status=status.HTTP_400_BAD_REQUEST)
+        consultancy = get_active_consultancy_for_user(
+            request.user, request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             if str(target_student_id).isdigit():
-                student = StudentProfile.objects.get(pk=target_student_id)
+                student = StudentProfile.objects.get(pk=target_student_id, consultancy=consultancy)
             else:
-                student = StudentProfile.objects.get(student_id=target_student_id)
+                student = StudentProfile.objects.get(student_id=target_student_id, consultancy=consultancy)
         except StudentProfile.DoesNotExist:
             return Response({'error': 'Student profile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1947,8 +1959,15 @@ def delete_student_document(request, pk):
     if not request.user.is_superuser:
         return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
 
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
-        doc = StudentDocument.objects.get(pk=pk)
+        doc = StudentDocument.objects.select_related('student').get(
+            pk=pk, student__consultancy=consultancy
+        )
     except StudentDocument.DoesNotExist:
         return Response({'error': 'Student document record not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2807,7 +2826,7 @@ def complete_application_workflow_step(request, pk, step_id):
         and request.user.student_profile.id == app.student_id
     )
 
-    if not (is_staff_or_admin or is_own_student):
+    if not _can_access_application(request, app):
         return Response(
             {'error': 'You do not have permission to access this application.'},
             status=status.HTTP_403_FORBIDDEN,
