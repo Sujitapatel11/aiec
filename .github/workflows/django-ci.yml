@@ -1,0 +1,118 @@
+name: AIEC CI
+
+on:
+  push:
+    branches:
+      - recovery/phase4-rebuild
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/django-ci.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/django-ci.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aiec-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Django checks and regression tests (SQLite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DEBUG: "True"
+      SECRET_KEY: "ci-only-not-for-production"
+      DATABASE_URL: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Check migration consistency
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run existing regression suites
+        run: |
+          python manage.py test \
+            test_counselling_workflow \
+            test_crm_workflow \
+            test_document_system \
+            test_lead_creation \
+            test_password_reset \
+            test_phase13_extensions \
+            test_phase14_students \
+            test_phase21_applications \
+            test_phase24_workflows \
+            test_phase25_application_documents \
+            test_phase26_application_offers \
+            test_phase29_application_timeline \
+            test_phase_a_whatsapp \
+            test_staff_creation \
+            test_staff_permissions \
+            test_unified_login \
+            test_video_testimonials \
+            --verbosity 2
+
+  frontend:
+    name: Frontend production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Regenerate and validate npm lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Clean install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Commit corrected lockfile on recovery branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/recovery/phase4-rebuild'
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix(frontend): synchronize npm lockfile"
+            git push origin HEAD:recovery/phase4-rebuild
+          else
+            echo "package-lock.json is already synchronized"
+          fi
