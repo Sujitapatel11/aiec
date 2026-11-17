@@ -38,7 +38,65 @@ DEFAULT_CHECKLIST_TEMPLATE = [
 
 
 
+class Consultancy(models.Model):
+    """A tenant that owns its CRM and student records."""
+
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=80, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name', 'id']
+
+
+class ConsultancyMembership(models.Model):
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('admin', 'Admin'),
+        ('staff', 'Staff'),
+    ]
+
+    consultancy = models.ForeignKey(
+        Consultancy, on_delete=models.CASCADE, related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='consultancy_memberships'
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='staff')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} — {self.consultancy.name} ({self.role})"
+
+    class Meta:
+        ordering = ['consultancy__name', 'user__username']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['consultancy', 'user'],
+                name='uniq_consultancy_user_membership',
+            ),
+        ]
+
+
+def get_default_consultancy():
+    """Return the bootstrap AIEC tenant used for legacy and public intake data."""
+    name = getattr(settings, 'CONSULTANCY_NAME', 'Aaradhya International Education Consultancy')
+    consultancy, _ = Consultancy.objects.get_or_create(
+        slug='aiec',
+        defaults={'name': name},
+    )
+    return consultancy.pk
+
+
 class Lead(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='leads', default=get_default_consultancy)
+
     STATUS_CHOICES = [
         ('new', 'New'),
         ('contacted', 'Contacted'),
@@ -202,6 +260,8 @@ def generate_student_id(year=None):
 
 
 class StudentProfile(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='students', default=get_default_consultancy)
+
     STUDENT_STATUS_CHOICES = [
         ('active',    'Active'),
         ('on_hold',   'On Hold'),

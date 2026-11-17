@@ -70,6 +70,7 @@ class LeadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lead
         fields = '__all__'
+        read_only_fields = ['consultancy']
 
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
