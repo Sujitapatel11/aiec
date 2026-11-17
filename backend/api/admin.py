@@ -4,6 +4,7 @@ from .models import (
     StudentProfile, StudentIdSequence, ProcessStep, Payment, StudentDocument, Application, ApplicationOffer,
     CountryWorkflow, CountryWorkflowStep, ApplicationWorkflowProgress,
     CountryDocumentTemplate, CountryDocumentRequirement,
+    Consultancy, ConsultancyMembership,
 )
 
 
@@ -201,3 +202,19 @@ class ApplicationOfferAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ['created_at', 'updated_at']
     list_select_related = ['application', 'application__student', 'offer_document']
+
+
+@admin.register(Consultancy)
+class ConsultancyAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'slug']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(ConsultancyMembership)
+class ConsultancyMembershipAdmin(admin.ModelAdmin):
+    list_display = ['consultancy', 'user', 'role', 'is_active', 'created_at']
+    list_filter = ['role', 'is_active', 'consultancy']
+    search_fields = ['consultancy__name', 'user__username', 'user__email']
+    readonly_fields = ['created_at']
