@@ -151,7 +151,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         email = serializer.validated_data['email'].strip().lower()
         phone = normalize_lead_phone(serializer.validated_data['phone'])
 
-        if Lead.objects.filter(email__iexact=email).exists():
+        tenant_leads = Lead.objects.filter(consultancy=consultancy)
+        if tenant_leads.filter(email__iexact=email).exists():
             return Response(
                 {'error': 'Lead with this email/phone already exists.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -159,7 +160,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 
         if phone and any(
             normalize_lead_phone(existing_phone) == phone
-            for existing_phone in Lead.objects.values_list('phone', flat=True)
+            for existing_phone in tenant_leads.values_list('phone', flat=True)
         ):
             return Response(
                 {'error': 'Lead with this email/phone already exists.'},
