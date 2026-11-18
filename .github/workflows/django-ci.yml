@@ -17,7 +17,7 @@ on:
       - ".github/workflows/django-ci.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: aiec-ci-${{ github.ref }}
@@ -72,6 +72,7 @@ jobs:
             test_phase26_application_offers \
             test_phase29_application_timeline \
             test_phase41_consultancy_ownership \
+            test_phase41_crm_activity_tenant_isolation \
             test_phase_a_whatsapp \
             test_staff_creation \
             test_staff_permissions \
@@ -96,24 +97,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Regenerate and validate npm lockfile
-        run: npm install --package-lock-only --ignore-scripts
-
       - name: Clean install frontend dependencies
         run: npm ci
 
       - name: Build frontend
         run: npm run build
-
-      - name: Commit corrected lockfile on recovery branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/recovery/phase4-rebuild'
-        run: |
-          if ! git diff --quiet -- package-lock.json; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json
-            git commit -m "fix(frontend): synchronize npm lockfile"
-            git push origin HEAD:recovery/phase4-rebuild
-          else
-            echo "package-lock.json is already synchronized"
-          fi
