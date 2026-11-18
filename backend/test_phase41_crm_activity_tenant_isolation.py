@@ -5,8 +5,10 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from api.serializers import ApplicationOfferSerializer
+
 from api.models import (
-    Appointment, Application, Consultancy, ConsultancyMembership, CounsellingNote,
+    Appointment, Application, ApplicationOffer, Consultancy, ConsultancyMembership, CounsellingNote,
     FollowUp, Lead, StudentProfile, Task,
 )
 
@@ -111,3 +113,13 @@ class CRMActivityTenantIsolationTests(TestCase):
         student_client.force_authenticate(user=self.student_user_a)
         response = student_client.get(f'/api/applications/{self.application_b.pk}/')
         self.assertEqual(response.status_code, 403)
+
+    def test_offer_cannot_be_reassigned_to_another_tenant_application(self):
+        offer = ApplicationOffer.objects.create(application=self.application_a)
+        serializer = ApplicationOfferSerializer(
+            offer,
+            data={'application': self.application_b.pk},
+            partial=True,
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('application', serializer.errors)
