@@ -18,7 +18,7 @@ from .models import (
     CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer,
     ApplicationTimelineEvent,
     ApplicationWorkflowProgress, CountryWorkflowStep,
-    ApplicationDocumentRequirement, CountryDocumentTemplate
+    ApplicationDocumentRequirement, CountryDocumentTemplate, ConsultancyMembership
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -400,6 +400,35 @@ class LeadViewSet(viewsets.ModelViewSet):
 
 # ── CRM Counselling, Follow-ups, Tasks & Appointments ViewSets ────────────
 
+def _crm_consultancy_for_request(request):
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied('An active consultancy membership is required.')
+    return consultancy
+
+
+def _validate_crm_tenant_relations(consultancy, validated_data, instance=None):
+    from rest_framework.exceptions import ValidationError
+    lead = validated_data.get('lead', getattr(instance, 'lead', None))
+    student = validated_data.get('student', getattr(instance, 'student', None))
+    assignee = validated_data.get('assigned_to', getattr(instance, 'assigned_to', None))
+    if lead and lead.consultancy_id != consultancy.pk:
+        raise ValidationError({'lead': 'Lead does not belong to the active consultancy.'})
+    if student and student.consultancy_id != consultancy.pk:
+        raise ValidationError({'student': 'Student does not belong to the active consultancy.'})
+    if lead and student and lead.consultancy_id != student.consultancy_id:
+        raise ValidationError('Lead and student must belong to the same consultancy.')
+    if assignee and not ConsultancyMembership.objects.filter(
+        consultancy=consultancy, user=assignee, is_active=True,
+        consultancy__is_active=True
+    ).exists():
+        raise ValidationError({'assigned_to': 'Assigned staff must be an active member of this consultancy.'})
+
+
+
 class CounsellingNoteViewSet(viewsets.ModelViewSet):
     # Phase 1.3 — select_related to avoid N+1 on author/lead/student lookups
     queryset = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
@@ -412,7 +441,11 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return CounsellingNote.objects.none()
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         if lead_id:
@@ -446,7 +479,11 @@ class FollowUpViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return FollowUp.objects.none()
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -538,7 +575,11 @@ class TaskViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Task.objects.none()
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -616,7 +657,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Appointment.objects.none()
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
