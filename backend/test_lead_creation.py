@@ -12,6 +12,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from api.models import Lead
+from test_tenant_fixtures import add_aiec_membership
 
 
 class LeadCreationTests(TestCase):
@@ -27,6 +28,8 @@ class LeadCreationTests(TestCase):
         self.student = User.objects.create_user(
             username='lead_student', password='StudentPass123!'
         )
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff)
         self.client = APIClient()
         self.payload = {
             'name': 'New CRM Lead',
