@@ -11,6 +11,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from api.models import (
+from test_tenant_fixtures import add_aiec_membership
     Application,
     ApplicationWorkflowProgress,
     Country,
@@ -63,6 +64,7 @@ class ApplicationWorkflowTests(TestCase):
             country_name=self.country.name,
             intake='Fall 2027',
         )
+        add_aiec_membership(self.staff)
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
 
