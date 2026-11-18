@@ -28,6 +28,7 @@ from rest_framework.test import APIClient
 
 from api.models import Lead, LeadActivity
 from api.whatsapp_service import (
+from test_tenant_fixtures import add_aiec_membership
     WHATSAPP_MAX_MESSAGE_LENGTH,
     normalize_phone_e164,
     send_step_completion_whatsapp,
@@ -113,6 +114,8 @@ class _BaseCRMTest(TestCase):
         )
 
         # Convenience clients
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff)
         self.admin_client = self._authed_client(self.admin)
         self.staff_client = self._authed_client(self.staff)
         self.student_client = self._authed_client(self.student)
