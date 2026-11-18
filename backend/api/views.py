@@ -18,7 +18,7 @@ from .models import (
     CounsellingNote, FollowUp, Task, Appointment, Application, ApplicationOffer,
     ApplicationTimelineEvent,
     ApplicationWorkflowProgress, CountryWorkflowStep,
-    ApplicationDocumentRequirement, CountryDocumentTemplate
+    ApplicationDocumentRequirement, CountryDocumentTemplate, ConsultancyMembership
 )
 from .serializers import (
     LeadSerializer, LeadDetailSerializer, LeadActivitySerializer, StaffUserSerializer,
@@ -34,7 +34,7 @@ from .serializers import (
     ApplicationDocumentRequirementSerializer
 )
 from . import cloudinary_service
-from .tenancy import get_active_consultancy_for_user, user_has_consultancy_access
+from .tenancy import get_active_consultancy_for_user, user_has_consultancy_access, user_has_consultancy_role
 from .cloudinary_service import (
     is_cloudinary_configured, upload_video_to_cloudinary, delete_video_from_cloudinary,
     upload_document_to_cloudinary, delete_document_from_cloudinary
@@ -132,11 +132,9 @@ class LeadViewSet(viewsets.ModelViewSet):
         return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         data = request.data.copy()
         source = str(data.get('source') or 'crm_manual').strip().lower()
         if source not in CRM_LEAD_SOURCES:
@@ -151,7 +149,8 @@ class LeadViewSet(viewsets.ModelViewSet):
         email = serializer.validated_data['email'].strip().lower()
         phone = normalize_lead_phone(serializer.validated_data['phone'])
 
-        if Lead.objects.filter(email__iexact=email).exists():
+        tenant_leads = Lead.objects.filter(consultancy=consultancy)
+        if tenant_leads.filter(email__iexact=email).exists():
             return Response(
                 {'error': 'Lead with this email/phone already exists.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -159,7 +158,7 @@ class LeadViewSet(viewsets.ModelViewSet):
 
         if phone and any(
             normalize_lead_phone(existing_phone) == phone
-            for existing_phone in Lead.objects.values_list('phone', flat=True)
+            for existing_phone in tenant_leads.values_list('phone', flat=True)
         ):
             return Response(
                 {'error': 'Lead with this email/phone already exists.'},
@@ -192,6 +191,16 @@ class LeadViewSet(viewsets.ModelViewSet):
                 except User.DoesNotExist:
                     return Response({'error': 'Assigned staff user not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+                consultancy = get_active_consultancy_for_user(
+                    request.user, request.headers.get('X-Consultancy-ID')
+                )
+                if not consultancy or not ConsultancyMembership.objects.filter(
+                    consultancy=consultancy, user=assignee, is_active=True
+                ).exists():
+                    return Response(
+                        {'error': 'Assigned staff must be an active member of this consultancy.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 if not request.user.is_superuser and assignee != request.user:
                     return Response(
                         {'error': 'Only Admins can assign or reassign leads to other staff members.'},
@@ -244,7 +253,14 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='staff-users')
     def staff_users(self, request):
-        users = User.objects.filter(is_active=True).filter(
+        consultancy = _get_staff_document_consultancy(request)
+        if not consultancy:
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        users = User.objects.filter(
+            is_active=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        ).filter(
             Q(is_staff=True) | Q(is_superuser=True) | Q(groups__name='Staff')
         ).distinct().order_by('first_name', 'username')
         serializer = StaffUserSerializer(users, many=True)
@@ -399,6 +415,35 @@ class LeadViewSet(viewsets.ModelViewSet):
 
 # ── CRM Counselling, Follow-ups, Tasks & Appointments ViewSets ────────────
 
+def _crm_consultancy_for_request(request):
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied('An active consultancy membership is required.')
+    return consultancy
+
+
+def _validate_crm_tenant_relations(consultancy, validated_data, instance=None):
+    from rest_framework.exceptions import ValidationError
+    lead = validated_data.get('lead', getattr(instance, 'lead', None))
+    student = validated_data.get('student', getattr(instance, 'student', None))
+    assignee = validated_data.get('assigned_to', getattr(instance, 'assigned_to', None))
+    if lead and lead.consultancy_id != consultancy.pk:
+        raise ValidationError({'lead': 'Lead does not belong to the active consultancy.'})
+    if student and student.consultancy_id != consultancy.pk:
+        raise ValidationError({'student': 'Student does not belong to the active consultancy.'})
+    if lead and student and lead.consultancy_id != student.consultancy_id:
+        raise ValidationError('Lead and student must belong to the same consultancy.')
+    if assignee and not ConsultancyMembership.objects.filter(
+        consultancy=consultancy, user=assignee, is_active=True,
+        consultancy__is_active=True
+    ).exists():
+        raise ValidationError({'assigned_to': 'Assigned staff must be an active member of this consultancy.'})
+
+
+
 class CounsellingNoteViewSet(viewsets.ModelViewSet):
     # Phase 1.3 — select_related to avoid N+1 on author/lead/student lookups
     queryset = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
@@ -411,7 +456,12 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = CounsellingNote.objects.select_related('lead', 'student', 'author').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return CounsellingNote.objects.none()
+        qs = CounsellingNote.objects.select_related('lead', 'student', 'author').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         if lead_id:
@@ -421,7 +471,9 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
         return qs.order_by('-created_at')
 
     def perform_create(self, serializer):
-        note = serializer.save(author=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        note = serializer.save(consultancy=consultancy, author=self.request.user)
         # Auto-log activity on the associated lead's timeline
         if note.lead:
             author_name = self.request.user.get_full_name() or self.request.user.username
@@ -431,6 +483,13 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
                 activity_type='counselling_note',
                 content=f"Counselling note added by {author_name}: {note.content[:120]}{'…' if len(note.content) > 120 else ''}"
             )
+
+    def perform_update(self, serializer):
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(
+            consultancy, serializer.validated_data, serializer.instance
+        )
+        serializer.save(consultancy=consultancy)
 
 
 class FollowUpViewSet(viewsets.ModelViewSet):
@@ -445,7 +504,12 @@ class FollowUpViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return FollowUp.objects.none()
+        qs = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -471,7 +535,9 @@ class FollowUpViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         from django.utils import timezone as tz
-        followup = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        followup = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Sync lead.next_follow_up to the earliest pending follow-up
         if followup.lead and followup.due_at and followup.status == 'pending':
             lead = followup.lead
@@ -499,7 +565,9 @@ class FollowUpViewSet(viewsets.ModelViewSet):
         if new_status == 'completed' and old_status != 'completed':
             completed_at = tz.now()
 
-        followup = serializer.save(completed_at=completed_at)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        followup = serializer.save(consultancy=consultancy, completed_at=completed_at)
 
         # Sync lead.next_follow_up
         if followup.lead:
@@ -537,7 +605,12 @@ class TaskViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Task.objects.none()
+        qs = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -562,7 +635,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         return qs.order_by('due_at', '-created_at')
 
     def perform_create(self, serializer):
-        task = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        task = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Auto-log activity on the lead timeline
         if task.lead:
             creator = self.request.user.get_full_name() or self.request.user.username
@@ -582,7 +657,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         completed_at = serializer.instance.completed_at
         if new_status == 'completed' and old_status != 'completed':
             completed_at = tz.now()
-        task = serializer.save(completed_at=completed_at)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        task = serializer.save(consultancy=consultancy, completed_at=completed_at)
 
         # Auto-log status transitions on the lead timeline
         if task.lead and new_status != old_status:
@@ -615,7 +692,12 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             self.permission_denied(request, message='Admin or Staff permissions required.')
 
     def get_queryset(self):
-        qs = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').all()
+        consultancy = get_active_consultancy_for_user(
+            self.request.user, self.request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Appointment.objects.none()
+        qs = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -642,7 +724,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return qs.order_by('appointment_date', '-created_at')
 
     def perform_create(self, serializer):
-        appointment = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        appointment = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Auto-log activity on the lead timeline
         if appointment.lead:
             creator = self.request.user.get_full_name() or self.request.user.username
@@ -658,7 +742,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         old_status = serializer.instance.status
         new_status = self.request.data.get('status', old_status)
-        appointment = serializer.save()
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        appointment = serializer.save(consultancy=consultancy, )
 
         # Auto-log status transitions on the lead timeline
         if appointment.lead and new_status != old_status:
@@ -844,23 +930,32 @@ def capture_lead(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    total_leads = Lead.objects.count()
-    status_breakdown = dict(
-        Lead.objects.values_list('status').annotate(count=Count('status'))
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
     )
-    # Distinct filter options for dropdowns
+    if not consultancy:
+        return Response(
+            {'error': 'An active consultancy membership is required.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    tenant_leads = Lead.objects.filter(consultancy=consultancy)
+    total_leads = tenant_leads.count()
+    status_breakdown = dict(
+        tenant_leads.values_list('status').annotate(count=Count('status'))
+    )
+    # Dropdown options and recent leads must never cross consultancy boundaries.
     countries = list(
-        Lead.objects.exclude(recommended_country='')
+        tenant_leads.exclude(recommended_country='')
         .values_list('recommended_country', flat=True)
         .distinct().order_by('recommended_country')
     )
     courses = list(
-        Lead.objects.exclude(course_interest='')
+        tenant_leads.exclude(course_interest='')
         .values_list('course_interest', flat=True)
         .distinct().order_by('course_interest')
     )
     recent_leads = LeadSerializer(
-        Lead.objects.order_by('-created_at')[:5], many=True
+        tenant_leads.order_by('-created_at')[:5], many=True
     ).data
     return Response({
         'total_leads': total_leads,
@@ -910,17 +1005,26 @@ def chat_counsellor(request):
 @permission_classes([IsAuthenticated])
 def manage_users(request):
     """List all staff or create a new staff member. Admin only."""
-    if not request.user.is_superuser:
-        return Response({'error': 'Admin access required.'}, status=403)
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=403)
 
     if request.method == 'GET':
-        users = User.objects.filter(is_staff=True).order_by('-date_joined')
+        users = User.objects.filter(
+            is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        ).order_by('-date_joined')
         data = [{
             'id':         u.id,
             'username':   u.username,
             'name':       u.get_full_name() or u.username,
             'email':      u.email,
-            'role':       'admin' if u.is_superuser else 'staff',
+            'role':       u.consultancy_memberships.filter(consultancy=consultancy, is_active=True).values_list('role', flat=True).first() or 'staff',
             'is_active':  u.is_active,
             'date_joined': u.date_joined.strftime('%d %b %Y'),
         } for u in users]
@@ -934,6 +1038,8 @@ def manage_users(request):
     email      = request.data.get('email', '').strip()
     role       = request.data.get('role', 'staff')  # 'staff' or 'admin'
 
+    if role not in {'admin', 'staff'}:
+        return Response({'error': 'Role must be admin or staff.'}, status=400)
     if not username or not password:
         return Response({'error': 'Username and password are required.'}, status=400)
     if User.objects.filter(username=username).exists():
@@ -946,7 +1052,10 @@ def manage_users(request):
     user = User.objects.create_user(
         username=username, password=password,
         email=email, first_name=first_name, last_name=last_name,
-        is_staff=True, is_superuser=(role == 'admin'), is_active=True,
+        is_staff=True, is_superuser=False, is_active=True,
+    )
+    ConsultancyMembership.objects.create(
+        consultancy=consultancy, user=user, role=role, is_active=True
     )
     if role == 'staff':
         staff_group, _ = Group.objects.get_or_create(name='Staff')
@@ -963,11 +1072,13 @@ def manage_users(request):
 @permission_classes([IsAuthenticated])
 def create_staff(request):
     """Create a new staff member account. Admin-only (is_superuser check)."""
-    if not request.user.is_superuser:
-        return Response(
-            {'error': 'Admin access required. Staff members cannot create staff accounts.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
     full_name = request.data.get('full_name') or request.data.get('name', '')
     full_name = str(full_name).strip()
@@ -1003,6 +1114,9 @@ def create_staff(request):
 
     staff_group, _ = Group.objects.get_or_create(name='Staff')
     user.groups.add(staff_group)
+    ConsultancyMembership.objects.create(
+        consultancy=consultancy, user=user, role='staff', is_active=True
+    )
 
     return Response({
         'id': user.id,
@@ -1022,11 +1136,20 @@ def create_staff(request):
 @permission_classes([IsAuthenticated])
 def manage_user_detail(request, user_id):
     """Get, update, or deactivate a staff member. Admin only."""
-    if not request.user.is_superuser:
-        return Response({'error': 'Admin access required.'}, status=403)
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=403)
 
     try:
-        user = User.objects.get(id=user_id, is_staff=True)
+        user = User.objects.get(
+            id=user_id, is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        )
     except User.DoesNotExist:
         return Response({'error': 'User not found.'}, status=404)
 
@@ -1038,7 +1161,7 @@ def manage_user_detail(request, user_id):
         return Response({
             'id': user.id, 'username': user.username,
             'name': user.get_full_name(), 'email': user.email,
-            'role': 'admin' if user.is_superuser else 'staff',
+            'role': ConsultancyMembership.objects.filter(consultancy=consultancy, user=user, is_active=True).values_list('role', flat=True).first() or 'staff',
             'is_active': user.is_active,
             'date_joined': user.date_joined.strftime('%d %b %Y'),
         })
@@ -1057,10 +1180,15 @@ def manage_user_detail(request, user_id):
         if 'is_active' in request.data:
             user.is_active = request.data['is_active']
         if 'role' in request.data:
-            user.is_superuser = request.data['role'] == 'admin'
-            if request.data['role'] == 'staff':
-                staff_group, _ = Group.objects.get_or_create(name='Staff')
-                user.groups.add(staff_group)
+            new_role = request.data['role']
+            if new_role not in {'admin', 'staff'}:
+                return Response({'error': 'Role must be admin or staff.'}, status=400)
+            # Tenant role is stored on ConsultancyMembership; never grant global superuser.
+            ConsultancyMembership.objects.filter(
+                consultancy=consultancy, user=user
+            ).update(role=new_role)
+            staff_group, _ = Group.objects.get_or_create(name='Staff')
+            user.groups.add(staff_group)
         if 'email' in request.data:
             user.email = request.data['email']
         if 'first_name' in request.data:
@@ -1139,11 +1267,11 @@ def enroll_student(request):
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
+    consultancy = _get_staff_document_consultancy(
+        request, {'owner', 'admin'}
     )
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active owner/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
 
     serializer = StudentEnrollmentSerializer(data=request.data)
     if not serializer.is_valid():
@@ -1741,6 +1869,19 @@ def manage_video_testimonial_detail(request, pk):
 
 # ── Student Documents API ──────────────────────────────────────────────────
 
+def _get_staff_document_consultancy(request, roles=None):
+    """Resolve the active tenant and enforce a real tenant membership role."""
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    allowed_roles = roles or {'owner', 'admin', 'staff'}
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, allowed_roles
+    ):
+        return None
+    return consultancy
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_student_document(request):
@@ -1772,11 +1913,9 @@ def upload_student_document(request):
         # Staff/Admin uploading
         if not target_student_id:
             return Response({'error': 'student_id is required for staff document upload.'}, status=status.HTTP_400_BAD_REQUEST)
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             if str(target_student_id).isdigit():
                 student = StudentProfile.objects.get(pk=target_student_id, consultancy=consultancy)
@@ -1884,11 +2023,9 @@ def list_student_documents(request, student_id=None):
     if is_student_user and not is_staff_or_admin:
         docs = request.user.student_profile.documents.all()
     elif is_staff_or_admin:
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         target_id = student_id or request.query_params.get('student_id')
         if target_id:
             try:
@@ -1920,11 +2057,9 @@ def verify_student_document(request, pk):
     if not is_staff_or_admin:
         return Response({'error': 'Staff or Admin permissions required to verify documents.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
-    )
+    consultancy = _get_staff_document_consultancy(request)
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
         doc = StudentDocument.objects.select_related('student').get(
             pk=pk, student__consultancy=consultancy
@@ -1956,14 +2091,17 @@ def delete_student_document(request, pk):
     Delete a student document. Admin ONLY (Staff receive 403).
     Removes database record AND deletes Cloudinary asset.
     """
-    if not request.user.is_superuser:
-        return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+    if not (
+        request.user.is_superuser or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    ):
+        return Response({'error': 'Delete action requires tenant admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
+    consultancy = _get_staff_document_consultancy(
+        request, {'owner', 'admin'}
     )
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active owner/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
         doc = StudentDocument.objects.select_related('student').get(
             pk=pk, student__consultancy=consultancy
@@ -2233,18 +2371,27 @@ def reset_student_password(request, student_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+
     try:
-        student = StudentProfile.objects.select_related('user', 'enrolled_by').get(pk=student_id)
+        student = StudentProfile.objects.select_related('user', 'enrolled_by').get(
+            pk=student_id, consultancy=consultancy
+        )
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Staff can only reset passwords for students they enrolled
-    if not request.user.is_superuser:
-        if student.enrolled_by_id != request.user.id:
-            return Response(
-                {'error': 'You can only reset passwords for students you personally enrolled.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+    is_tenant_admin = user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    )
+    if not is_tenant_admin and student.enrolled_by_id != request.user.id:
+        return Response(
+            {'error': 'Staff can only reset passwords for students they personally enrolled in this consultancy.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     new_password = request.data.get('new_password', '').strip()
     if not new_password:
@@ -2277,14 +2424,20 @@ def reset_staff_password(request, user_id):
     Same full password policy as account creation.
     Existing DRF auth token invalidated on success.
     """
-    if not request.user.is_superuser:
-        return Response(
-            {'error': 'Admin access required. Staff cannot reset other staff passwords.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
-        target = User.objects.get(id=user_id, is_staff=True)
+        target = User.objects.get(
+            id=user_id, is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        )
     except User.DoesNotExist:
         return Response({'error': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2322,11 +2475,9 @@ def manage_student_applications(request, student_id):
         or request.user.groups.filter(name='Staff').exists()
     )
     if is_staff_or_admin:
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         student_qs = StudentProfile.objects.filter(consultancy=consultancy)
     else:
         student_qs = StudentProfile.objects.filter(user=request.user)
@@ -2456,11 +2607,7 @@ def manage_application_detail(request, pk):
     except Application.DoesNotExist:
         return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, app)
     is_own_student = hasattr(request.user, 'student_profile') and request.user.student_profile.id == app.student.id
 
     if not _can_access_application(request, app):
@@ -2524,16 +2671,30 @@ def manage_application_detail(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _can_manage_application(request, application):
+    return user_has_consultancy_role(
+        request.user,
+        application.student.consultancy,
+        {'owner', 'admin', 'staff'},
+    )
+
+
 def _can_access_application(request, application):
+    """Tenant staff need an active staff/admin role; students see only their own."""
     if (
         request.user.is_superuser
         or request.user.is_staff
         or request.user.groups.filter(name='Staff').exists()
     ):
-        return user_has_consultancy_access(request.user, application.student.consultancy)
+        return user_has_consultancy_role(
+            request.user,
+            application.student.consultancy,
+            {'owner', 'admin', 'staff'},
+        )
     return StudentProfile.objects.filter(
         pk=application.student_id,
         user=request.user,
+        consultancy=application.student.consultancy,
     ).exists()
 
 
@@ -2551,11 +2712,7 @@ def application_timeline(request, pk):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser
-        or request.user.is_staff
-        or request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
     if request.method == 'GET':
         events = ApplicationTimelineEvent.objects.filter(
             application=application,
@@ -2598,11 +2755,7 @@ def manage_application_offers(request, pk):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
 
     if request.method == 'GET':
         offers = application.offers.select_related('offer_document', 'application__student').all()
@@ -2639,11 +2792,7 @@ def manage_application_offer_detail(request, pk, offer_id):
     except ApplicationOffer.DoesNotExist:
         return Response({'error': 'Offer not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
 
     if request.method == 'GET':
         return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
@@ -2677,11 +2826,7 @@ def manage_offer_detail_by_id(request, offer_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, offer.application)
 
     if request.method == 'GET':
         return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
@@ -2816,11 +2961,7 @@ def complete_application_workflow_step(request, pk, step_id):
     except Application.DoesNotExist:
         return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, app)
     is_own_student = (
         hasattr(request.user, 'student_profile')
         and request.user.student_profile.id == app.student_id

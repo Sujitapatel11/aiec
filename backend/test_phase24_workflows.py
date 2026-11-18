@@ -17,7 +17,8 @@ from api.models import (
     CountryWorkflow,
     CountryWorkflowStep,
     StudentProfile,
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 
 class ApplicationWorkflowTests(TestCase):
@@ -63,6 +64,7 @@ class ApplicationWorkflowTests(TestCase):
             country_name=self.country.name,
             intake='Fall 2027',
         )
+        add_aiec_membership(self.staff)
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
 
@@ -127,7 +129,7 @@ class ApplicationWorkflowTests(TestCase):
         self.assertEqual(self.client.get(own_url).status_code, 200)
         self.assertEqual(self.client.get(own_list_url).status_code, 200)
         self.assertEqual(self.client.get(other_url).status_code, 403)
-        self.assertEqual(self.client.get(other_list_url).status_code, 403)
+        self.assertEqual(self.client.get(other_list_url).status_code, 404)
         self.assertEqual(self.client.post(self.completion_url(), {}, format='json').status_code, 403)
 
     def test_anonymous_user_cannot_read_application_or_complete_milestone(self):

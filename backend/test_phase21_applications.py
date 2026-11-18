@@ -13,6 +13,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from api.models import Application, Country, Course, ProcessStep, StudentProfile
+from test_tenant_fixtures import add_aiec_membership
 
 
 class ApplicationApiTests(TestCase):
@@ -54,6 +55,8 @@ class ApplicationApiTests(TestCase):
             level='Bachelor',
             duration='4 years',
         )
+        add_aiec_membership(self.staff)
+        add_aiec_membership(self.admin)
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
 
@@ -201,7 +204,7 @@ class ApplicationApiTests(TestCase):
         self.assertEqual(own_list.status_code, 200)
         self.assertEqual([row['id'] for row in own_list.data], [own_app.id])
         self.assertEqual(own_detail.status_code, 200)
-        self.assertEqual(other_list.status_code, 403)
+        self.assertEqual(other_list.status_code, 404)
         self.assertEqual(other_detail.status_code, 403)
         self.assertEqual(
             self.client.patch(

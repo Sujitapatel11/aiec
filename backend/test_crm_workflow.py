@@ -12,6 +12,7 @@ from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from rest_framework.test import APIClient
 from api.models import Lead, LeadActivity
+from test_tenant_fixtures import add_aiec_membership
 
 
 class CRMWorkflowTests(TestCase):
@@ -37,6 +38,9 @@ class CRMWorkflowTests(TestCase):
         )
         self.student.groups.add(student_group)
 
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff1)
+        add_aiec_membership(self.staff2)
         self.client = APIClient()
         self.lead_payload = {
             'name': 'Aarav Sharma',

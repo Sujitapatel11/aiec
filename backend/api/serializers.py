@@ -454,6 +454,14 @@ class ApplicationOfferSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         application = attrs.get('application') or getattr(self.instance, 'application', None)
         offer_document = attrs.get('offer_document') or getattr(self.instance, 'offer_document', None)
+        if (
+            self.instance
+            and application
+            and application.pk != self.instance.application_id
+        ):
+            raise serializers.ValidationError({
+                'application': 'An offer cannot be moved to a different application.'
+            })
         if application and offer_document and application.student_id != offer_document.student_id:
             raise serializers.ValidationError({
                 'offer_document': 'Offer document must belong to the same student as the application.'

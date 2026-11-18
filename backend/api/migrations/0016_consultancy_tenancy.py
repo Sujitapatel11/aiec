@@ -22,8 +22,8 @@ def assign_legacy_records_to_aiec(apps, schema_editor):
     # Existing AIEC administrators and staff are explicitly members of the
     # bootstrap tenant; no global staff access is implicitly granted later.
     for user in User.objects.using(db).filter(is_active=True).filter(
-        models.Q(is_staff=True) | models.Q(is_superuser=True)
-    ).iterator():
+        models.Q(is_staff=True) | models.Q(is_superuser=True) | models.Q(groups__name='Staff')
+    ).distinct().iterator():
         role = 'owner' if user.is_superuser else ('admin' if user.is_staff else 'staff')
         ConsultancyMembership.objects.using(db).get_or_create(
             consultancy_id=consultancy.pk,

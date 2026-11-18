@@ -32,7 +32,8 @@ from api.whatsapp_service import (
     normalize_phone_e164,
     send_step_completion_whatsapp,
     send_whatsapp_to_lead,
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,8 @@ class _BaseCRMTest(TestCase):
         )
 
         # Convenience clients
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff)
         self.admin_client = self._authed_client(self.admin)
         self.staff_client = self._authed_client(self.staff)
         self.student_client = self._authed_client(self.student)

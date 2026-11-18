@@ -10,7 +10,10 @@ django.setup()
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from rest_framework.test import APIClient
-from api.models import Lead, CounsellingNote, FollowUp, Task, Appointment
+from api.models import (
+    Lead, CounsellingNote, FollowUp, Task, Appointment,
+    Consultancy, ConsultancyMembership,
+)
 
 
 class CounsellingWorkflowTests(TestCase):
@@ -25,6 +28,18 @@ class CounsellingWorkflowTests(TestCase):
             username='counsel_staff', password='StaffPass123!', first_name='Staff', is_staff=True
         )
         self.staff.groups.add(staff_group)
+
+        # Tenant-aware CRM endpoints require explicit active memberships.
+        self.consultancy, _ = Consultancy.objects.get_or_create(
+            slug='aiec',
+            defaults={'name': 'Aaradhya International Education Consultancy'},
+        )
+        ConsultancyMembership.objects.create(
+            consultancy=self.consultancy, user=self.admin, role='admin', is_active=True
+        )
+        ConsultancyMembership.objects.create(
+            consultancy=self.consultancy, user=self.staff, role='staff', is_active=True
+        )
 
         self.student = User.objects.create_user(
             username='counsel_student', password='StudentPass123!', first_name='Student'

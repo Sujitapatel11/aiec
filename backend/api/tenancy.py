@@ -36,3 +36,23 @@ def user_has_consultancy_access(user, consultancy):
         is_active=True,
         consultancy__is_active=True,
     ).exists()
+
+
+def user_has_consultancy_role(user, consultancy, roles):
+    """Return whether the user has an active allowed role in this tenant."""
+    if not consultancy or not user or not user.is_authenticated:
+        return False
+    return ConsultancyMembership.objects.filter(
+        user=user,
+        consultancy=consultancy,
+        is_active=True,
+        consultancy__is_active=True,
+        role__in=roles,
+    ).exists()
+
+
+def user_has_consultancy_staff_access(user, consultancy):
+    """Staff/admin capability must come from the active tenant membership."""
+    return user_has_consultancy_role(
+        user, consultancy, {'owner', 'admin', 'staff'}
+    )
