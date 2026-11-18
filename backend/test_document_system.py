@@ -33,7 +33,7 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User, Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.authtoken.models import Token
-from api.models import StudentProfile, StudentDocument
+from api.models import StudentProfile, StudentDocument, ConsultancyMembership
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -139,6 +139,13 @@ class DocumentSystemTests(TestCase):
         # Student user
         self.student_user, self.student_token = make_user("student_doc")
         self.student_profile = make_student_profile(self.student_user)
+        tenant = self.student_profile.consultancy
+        ConsultancyMembership.objects.create(
+            consultancy=tenant, user=self.admin_user, role='admin'
+        )
+        ConsultancyMembership.objects.create(
+            consultancy=tenant, user=self.staff_user, role='staff'
+        )
 
     def auth(self, token):
         return {"HTTP_AUTHORIZATION": f"Token {token}"}
