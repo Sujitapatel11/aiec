@@ -14,7 +14,6 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from api.models import (
-from test_tenant_fixtures import add_aiec_membership
     Application,
     ApplicationDocumentRequirement,
     Country,
@@ -24,7 +23,8 @@ from test_tenant_fixtures import add_aiec_membership
     ProcessStep,
     StudentDocument,
     StudentProfile,
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 
 MOCK_CLOUDINARY_RESPONSE = {
