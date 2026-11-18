@@ -1869,8 +1869,6 @@ def manage_video_testimonial_detail(request, pk):
 
 # ── Student Documents API ──────────────────────────────────────────────────
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def _get_staff_document_consultancy(request, roles=None):
     """Resolve the active tenant and enforce a real tenant membership role."""
     consultancy = get_active_consultancy_for_user(
@@ -1884,6 +1882,8 @@ def _get_staff_document_consultancy(request, roles=None):
     return consultancy
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def upload_student_document(request):
     """
     Upload a document (PDF, JPG, PNG - Max 15MB) for a student.
