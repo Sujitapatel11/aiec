@@ -1042,6 +1042,8 @@ def manage_users(request):
     email      = request.data.get('email', '').strip()
     role       = request.data.get('role', 'staff')  # 'staff' or 'admin'
 
+    if role not in {'admin', 'staff'}:
+        return Response({'error': 'Role must be admin or staff.'}, status=400)
     if not username or not password:
         return Response({'error': 'Username and password are required.'}, status=400)
     if User.objects.filter(username=username).exists():
@@ -1056,9 +1058,6 @@ def manage_users(request):
         email=email, first_name=first_name, last_name=last_name,
         is_staff=True, is_superuser=(role == 'admin'), is_active=True,
     )
-    if role not in {'admin', 'staff'}:
-        user.delete()
-        return Response({'error': 'Role must be admin or staff.'}, status=400)
     ConsultancyMembership.objects.create(
         consultancy=consultancy, user=user, role=role, is_active=True
     )
@@ -1188,8 +1187,14 @@ def manage_user_detail(request, user_id):
         if 'is_active' in request.data:
             user.is_active = request.data['is_active']
         if 'role' in request.data:
-            user.is_superuser = request.data['role'] == 'admin'
-            if request.data['role'] == 'staff':
+            new_role = request.data['role']
+            if new_role not in {'admin', 'staff'}:
+                return Response({'error': 'Role must be admin or staff.'}, status=400)
+            user.is_superuser = new_role == 'admin'
+            ConsultancyMembership.objects.filter(
+                consultancy=consultancy, user=user
+            ).update(role=new_role)
+            if new_role == 'staff':
                 staff_group, _ = Group.objects.get_or_create(name='Staff')
                 user.groups.add(staff_group)
         if 'email' in request.data:
