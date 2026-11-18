@@ -845,23 +845,32 @@ def capture_lead(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    total_leads = Lead.objects.count()
-    status_breakdown = dict(
-        Lead.objects.values_list('status').annotate(count=Count('status'))
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
     )
-    # Distinct filter options for dropdowns
+    if not consultancy:
+        return Response(
+            {'error': 'An active consultancy membership is required.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    tenant_leads = Lead.objects.filter(consultancy=consultancy)
+    total_leads = tenant_leads.count()
+    status_breakdown = dict(
+        tenant_leads.values_list('status').annotate(count=Count('status'))
+    )
+    # Dropdown options and recent leads must never cross consultancy boundaries.
     countries = list(
-        Lead.objects.exclude(recommended_country='')
+        tenant_leads.exclude(recommended_country='')
         .values_list('recommended_country', flat=True)
         .distinct().order_by('recommended_country')
     )
     courses = list(
-        Lead.objects.exclude(course_interest='')
+        tenant_leads.exclude(course_interest='')
         .values_list('course_interest', flat=True)
         .distinct().order_by('course_interest')
     )
     recent_leads = LeadSerializer(
-        Lead.objects.order_by('-created_at')[:5], many=True
+        tenant_leads.order_by('-created_at')[:5], many=True
     ).data
     return Response({
         'total_leads': total_leads,
