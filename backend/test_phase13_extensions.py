@@ -23,6 +23,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api.models import Lead, LeadActivity, FollowUp, Task, Appointment, CounsellingNote
+from test_tenant_fixtures import add_aiec_membership
 
 
 class Phase13ExtensionTests(TestCase):
@@ -57,6 +58,8 @@ class Phase13ExtensionTests(TestCase):
         )
         self.student_user.groups.add(student_group)
 
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff)
         self.client = APIClient()
         self.lead = Lead.objects.create(
             name='Extension Test Lead',
