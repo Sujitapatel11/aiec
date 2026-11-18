@@ -204,7 +204,7 @@ class ApplicationApiTests(TestCase):
         self.assertEqual(own_list.status_code, 200)
         self.assertEqual([row['id'] for row in own_list.data], [own_app.id])
         self.assertEqual(own_detail.status_code, 200)
-        self.assertEqual(other_list.status_code, 403)
+        self.assertEqual(other_list.status_code, 404)
         self.assertEqual(other_detail.status_code, 403)
         self.assertEqual(
             self.client.patch(
