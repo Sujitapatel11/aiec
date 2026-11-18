@@ -17,8 +17,12 @@ def backfill_crm_consultancies(apps, schema_editor):
                     'resolve this data conflict before applying tenant ownership.'
                 )
             tenant_id = lead_tenant_id or student_tenant_id
-            if tenant_id:
-                Model.objects.using(db).filter(pk=pk).update(consultancy_id=tenant_id)
+            if not tenant_id:
+                raise RuntimeError(
+                    f'{model_name} {pk} has no lead or student from which to infer '
+                    'consultancy ownership; assign its tenant explicitly before migrating.'
+                )
+            Model.objects.using(db).filter(pk=pk).update(consultancy_id=tenant_id)
 
 
 class Migration(migrations.Migration):
