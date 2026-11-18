@@ -2672,15 +2672,21 @@ def manage_application_detail(request, pk):
 
 
 def _can_access_application(request, application):
+    """Tenant staff need an active staff/admin role; students see only their own."""
     if (
         request.user.is_superuser
         or request.user.is_staff
         or request.user.groups.filter(name='Staff').exists()
     ):
-        return user_has_consultancy_access(request.user, application.student.consultancy)
+        return user_has_consultancy_role(
+            request.user,
+            application.student.consultancy,
+            {'owner', 'admin', 'staff'},
+        )
     return StudentProfile.objects.filter(
         pk=application.student_id,
         user=request.user,
+        consultancy=application.student.consultancy,
     ).exists()
 
 
