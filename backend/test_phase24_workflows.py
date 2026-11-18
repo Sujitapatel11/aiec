@@ -11,14 +11,14 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from api.models import (
-from test_tenant_fixtures import add_aiec_membership
     Application,
     ApplicationWorkflowProgress,
     Country,
     CountryWorkflow,
     CountryWorkflowStep,
     StudentProfile,
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 
 class ApplicationWorkflowTests(TestCase):
