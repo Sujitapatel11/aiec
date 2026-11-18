@@ -2414,8 +2414,18 @@ def reset_staff_password(request, user_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+
     try:
-        target = User.objects.get(id=user_id, is_staff=True)
+        target = User.objects.get(
+            id=user_id, is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        )
     except User.DoesNotExist:
         return Response({'error': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
 
