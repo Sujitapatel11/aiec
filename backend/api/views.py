@@ -2822,7 +2822,7 @@ def manage_offer_detail_by_id(request, offer_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = _can_manage_application(request, application)
+    is_staff_or_admin = _can_manage_application(request, offer.application)
 
     if request.method == 'GET':
         return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
