@@ -446,6 +446,7 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
         )
         if not consultancy:
             return CounsellingNote.objects.none()
+        qs = CounsellingNote.objects.select_related('lead', 'student', 'author').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         if lead_id:
@@ -455,7 +456,9 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
         return qs.order_by('-created_at')
 
     def perform_create(self, serializer):
-        note = serializer.save(author=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        note = serializer.save(consultancy=consultancy, author=self.request.user)
         # Auto-log activity on the associated lead's timeline
         if note.lead:
             author_name = self.request.user.get_full_name() or self.request.user.username
@@ -484,6 +487,7 @@ class FollowUpViewSet(viewsets.ModelViewSet):
         )
         if not consultancy:
             return FollowUp.objects.none()
+        qs = FollowUp.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -509,7 +513,9 @@ class FollowUpViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         from django.utils import timezone as tz
-        followup = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        followup = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Sync lead.next_follow_up to the earliest pending follow-up
         if followup.lead and followup.due_at and followup.status == 'pending':
             lead = followup.lead
@@ -537,7 +543,9 @@ class FollowUpViewSet(viewsets.ModelViewSet):
         if new_status == 'completed' and old_status != 'completed':
             completed_at = tz.now()
 
-        followup = serializer.save(completed_at=completed_at)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        followup = serializer.save(consultancy=consultancy, completed_at=completed_at)
 
         # Sync lead.next_follow_up
         if followup.lead:
@@ -580,6 +588,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         )
         if not consultancy:
             return Task.objects.none()
+        qs = Task.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -604,7 +613,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         return qs.order_by('due_at', '-created_at')
 
     def perform_create(self, serializer):
-        task = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        task = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Auto-log activity on the lead timeline
         if task.lead:
             creator = self.request.user.get_full_name() or self.request.user.username
@@ -624,7 +635,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         completed_at = serializer.instance.completed_at
         if new_status == 'completed' and old_status != 'completed':
             completed_at = tz.now()
-        task = serializer.save(completed_at=completed_at)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        task = serializer.save(consultancy=consultancy, completed_at=completed_at)
 
         # Auto-log status transitions on the lead timeline
         if task.lead and new_status != old_status:
@@ -662,6 +675,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         )
         if not consultancy:
             return Appointment.objects.none()
+        qs = Appointment.objects.select_related('lead', 'student', 'assigned_to', 'created_by').filter(consultancy=consultancy)
         lead_id = self.request.query_params.get('lead')
         student_id = self.request.query_params.get('student')
         status_param = self.request.query_params.get('status')
@@ -688,7 +702,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return qs.order_by('appointment_date', '-created_at')
 
     def perform_create(self, serializer):
-        appointment = serializer.save(created_by=self.request.user)
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data)
+        appointment = serializer.save(consultancy=consultancy, created_by=self.request.user)
         # Auto-log activity on the lead timeline
         if appointment.lead:
             creator = self.request.user.get_full_name() or self.request.user.username
@@ -704,7 +720,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         old_status = serializer.instance.status
         new_status = self.request.data.get('status', old_status)
-        appointment = serializer.save()
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(consultancy, serializer.validated_data, serializer.instance)
+        appointment = serializer.save(consultancy=consultancy, )
 
         # Auto-log status transitions on the lead timeline
         if appointment.lead and new_status != old_status:
