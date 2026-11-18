@@ -14,9 +14,9 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.models import (
-from test_tenant_fixtures import add_aiec_membership
     Application, ApplicationOffer, Country, Course, StudentDocument, StudentProfile
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 
 class ApplicationOfferTests(TestCase):
