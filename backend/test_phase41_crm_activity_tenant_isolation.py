@@ -9,7 +9,7 @@ from api.serializers import ApplicationOfferSerializer
 
 from api.models import (
     Appointment, Application, ApplicationOffer, Consultancy, ConsultancyMembership, CounsellingNote,
-    FollowUp, Lead, StudentProfile, Task,
+    FollowUp, Lead, StudentDocument, StudentProfile, Task,
 )
 
 
@@ -68,6 +68,16 @@ class CRMActivityTenantIsolationTests(TestCase):
             university_name='Tenant A University',
             course_name='Tenant A Course',
         )
+        self.document_a = StudentDocument.objects.create(
+            student=self.student_a, document_type='Passport',
+            file_url='https://example.test/a.pdf', public_id='tenant-a-doc',
+            file_name='a.pdf', uploaded_by=self.staff_a,
+        )
+        self.document_b = StudentDocument.objects.create(
+            student=self.student_b, document_type='Passport',
+            file_url='https://example.test/b.pdf', public_id='tenant-b-doc',
+            file_name='b.pdf', uploaded_by=self.student_user_b,
+        )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff_a)
 
@@ -123,3 +133,23 @@ class CRMActivityTenantIsolationTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn('application', serializer.errors)
+
+    def test_tenant_a_staff_document_list_excludes_tenant_b_documents(self):
+        response = self.client.get('/api/documents/')
+        self.assertEqual(response.status_code, 200)
+        returned_ids = [item['id'] for item in response.data]
+        self.assertIn(self.document_a.pk, returned_ids)
+        self.assertNotIn(self.document_b.pk, returned_ids)
+
+    def test_tenant_a_staff_cannot_verify_tenant_b_document(self):
+        response = self.client.patch(
+            f'/api/documents/{self.document_b.pk}/status/',
+            {'verification_status': 'verified'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_tenant_a_admin_cannot_delete_tenant_b_document(self):
+        response = self.client.delete(f'/api/documents/{self.document_b.pk}/')
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(StudentDocument.objects.filter(pk=self.document_b.pk).exists())
