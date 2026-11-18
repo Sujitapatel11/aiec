@@ -842,6 +842,7 @@ class StudentDocument(models.Model):
 # ── CRM Counselling, Follow-ups, Tasks & Appointments ───────────────────────
 
 class CounsellingNote(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='counsellingnote_records', default=get_default_consultancy)
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, null=True, blank=True, related_name='counselling_notes')
     student = models.ForeignKey('StudentProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='counselling_notes')
     author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='authored_counselling_notes')
@@ -859,6 +860,7 @@ class CounsellingNote(models.Model):
 
 
 class FollowUp(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='followup_records', default=get_default_consultancy)
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('completed', 'Completed'),
@@ -897,6 +899,7 @@ class FollowUp(models.Model):
 
 
 class Task(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='task_records', default=get_default_consultancy)
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
@@ -936,6 +939,7 @@ class Task(models.Model):
 
 
 class Appointment(models.Model):
+    consultancy = models.ForeignKey(Consultancy, on_delete=models.PROTECT, related_name='appointment_records', default=get_default_consultancy)
     STATUS_CHOICES = [
         ('scheduled', 'Scheduled'),
         ('completed', 'Completed'),
