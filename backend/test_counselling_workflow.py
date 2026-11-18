@@ -10,7 +10,10 @@ django.setup()
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from rest_framework.test import APIClient
-from api.models import (\n    Lead, CounsellingNote, FollowUp, Task, Appointment,\n    Consultancy, ConsultancyMembership,\n)
+from api.models import (
+    Lead, CounsellingNote, FollowUp, Task, Appointment,
+    Consultancy, ConsultancyMembership,
+)
 
 
 class CounsellingWorkflowTests(TestCase):
