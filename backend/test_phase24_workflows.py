@@ -129,7 +129,7 @@ class ApplicationWorkflowTests(TestCase):
         self.assertEqual(self.client.get(own_url).status_code, 200)
         self.assertEqual(self.client.get(own_list_url).status_code, 200)
         self.assertEqual(self.client.get(other_url).status_code, 403)
-        self.assertEqual(self.client.get(other_list_url).status_code, 403)
+        self.assertEqual(self.client.get(other_list_url).status_code, 404)
         self.assertEqual(self.client.post(self.completion_url(), {}, format='json').status_code, 403)
 
     def test_anonymous_user_cannot_read_application_or_complete_milestone(self):
