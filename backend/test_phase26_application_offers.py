@@ -15,7 +15,8 @@ from rest_framework.test import APIClient
 
 from api.models import (
     Application, ApplicationOffer, Country, Course, StudentDocument, StudentProfile
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 
 class ApplicationOfferTests(TestCase):
@@ -71,6 +72,8 @@ class ApplicationOfferTests(TestCase):
             student=self.student2, document_type='offer_letter', file_name='offer2.pdf', file_url='http://example.com/offer2.pdf'
         )
 
+        add_aiec_membership(self.admin)
+        add_aiec_membership(self.staff)
         self.client = APIClient()
 
     # ── MODEL TESTS ──────────────────────────────────────────────────────────

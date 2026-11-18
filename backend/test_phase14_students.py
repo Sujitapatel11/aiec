@@ -13,6 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api.models import Lead, LeadActivity, ProcessStep, StudentProfile
+from test_tenant_fixtures import add_aiec_membership
 
 
 class StudentSearchTests(TestCase):
@@ -44,6 +45,8 @@ class StudentSearchTests(TestCase):
             destination_country='Australia',
         )
         self.lead = self.make_lead()
+        add_aiec_membership(self.staff)
+        add_aiec_membership(self.admin)
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
 

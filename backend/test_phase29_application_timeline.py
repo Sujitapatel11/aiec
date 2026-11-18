@@ -9,6 +9,8 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from test_tenant_fixtures import add_aiec_membership
+
 from api.models import (
     Application,
     ApplicationDocumentRequirement,
@@ -28,6 +30,7 @@ class ApplicationTimelineTests(TestCase):
         self.staff = User.objects.create_user(
             username='timeline_staff', password='StaffPass123!', is_staff=True
         )
+        add_aiec_membership(self.staff)
         self.student_user = User.objects.create_user(
             username='timeline_student', password='StudentPass123!'
         )
