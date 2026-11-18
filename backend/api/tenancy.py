@@ -49,3 +49,10 @@ def user_has_consultancy_role(user, consultancy, roles):
         consultancy__is_active=True,
         role__in=roles,
     ).exists()
+
+
+def user_has_consultancy_staff_access(user, consultancy):
+    """Staff/admin capability must come from the active tenant membership."""
+    return user_has_consultancy_role(
+        user, consultancy, {'owner', 'admin', 'staff'}
+    )
