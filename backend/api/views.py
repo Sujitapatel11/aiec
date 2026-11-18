@@ -132,11 +132,9 @@ class LeadViewSet(viewsets.ModelViewSet):
         return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         data = request.data.copy()
         source = str(data.get('source') or 'crm_manual').strip().lower()
         if source not in CRM_LEAD_SOURCES:
@@ -255,11 +253,9 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='staff-users')
     def staff_users(self, request):
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         users = User.objects.filter(
             is_active=True,
             consultancy_memberships__consultancy=consultancy,
@@ -1271,11 +1267,11 @@ def enroll_student(request):
     if not (request.user.is_superuser or request.user.is_staff or request.user.groups.filter(name='Staff').exists()):
         return Response({'error': 'Admin or Staff permissions required.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
+    consultancy = _get_staff_document_consultancy(
+        request, {'owner', 'admin'}
     )
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active owner/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
 
     serializer = StudentEnrollmentSerializer(data=request.data)
     if not serializer.is_valid():
@@ -1875,6 +1871,19 @@ def manage_video_testimonial_detail(request, pk):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def _get_staff_document_consultancy(request, roles=None):
+    """Resolve the active tenant and enforce a real tenant membership role."""
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    allowed_roles = roles or {'owner', 'admin', 'staff'}
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, allowed_roles
+    ):
+        return None
+    return consultancy
+
+
 def upload_student_document(request):
     """
     Upload a document (PDF, JPG, PNG - Max 15MB) for a student.
@@ -1904,11 +1913,9 @@ def upload_student_document(request):
         # Staff/Admin uploading
         if not target_student_id:
             return Response({'error': 'student_id is required for staff document upload.'}, status=status.HTTP_400_BAD_REQUEST)
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             if str(target_student_id).isdigit():
                 student = StudentProfile.objects.get(pk=target_student_id, consultancy=consultancy)
@@ -2016,11 +2023,9 @@ def list_student_documents(request, student_id=None):
     if is_student_user and not is_staff_or_admin:
         docs = request.user.student_profile.documents.all()
     elif is_staff_or_admin:
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         target_id = student_id or request.query_params.get('student_id')
         if target_id:
             try:
@@ -2469,11 +2474,9 @@ def manage_student_applications(request, student_id):
         or request.user.groups.filter(name='Staff').exists()
     )
     if is_staff_or_admin:
-        consultancy = get_active_consultancy_for_user(
-            request.user, request.headers.get('X-Consultancy-ID')
-        )
+        consultancy = _get_staff_document_consultancy(request)
         if not consultancy:
-            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
         student_qs = StudentProfile.objects.filter(consultancy=consultancy)
     else:
         student_qs = StudentProfile.objects.filter(user=request.user)
