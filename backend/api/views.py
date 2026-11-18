@@ -2057,11 +2057,9 @@ def verify_student_document(request, pk):
     if not is_staff_or_admin:
         return Response({'error': 'Staff or Admin permissions required to verify documents.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
-    )
+    consultancy = _get_staff_document_consultancy(request)
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active staff/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
         doc = StudentDocument.objects.select_related('student').get(
             pk=pk, student__consultancy=consultancy
@@ -2093,14 +2091,17 @@ def delete_student_document(request, pk):
     Delete a student document. Admin ONLY (Staff receive 403).
     Removes database record AND deletes Cloudinary asset.
     """
-    if not request.user.is_superuser:
-        return Response({'error': 'Delete action requires Admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
+    if not (
+        request.user.is_superuser or request.user.is_staff
+        or request.user.groups.filter(name='Staff').exists()
+    ):
+        return Response({'error': 'Delete action requires tenant admin permissions.'}, status=status.HTTP_403_FORBIDDEN)
 
-    consultancy = get_active_consultancy_for_user(
-        request.user, request.headers.get('X-Consultancy-ID')
+    consultancy = _get_staff_document_consultancy(
+        request, {'owner', 'admin'}
     )
     if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'An active owner/admin consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
     try:
         doc = StudentDocument.objects.select_related('student').get(
             pk=pk, student__consultancy=consultancy
