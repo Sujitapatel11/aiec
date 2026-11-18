@@ -57,7 +57,8 @@ class CRMActivityTenantIsolationTests(TestCase):
             with self.subTest(endpoint=endpoint):
                 listing = self.client.get(f'/api/{endpoint}/')
                 self.assertEqual(listing.status_code, 200)
-                rows = listing.data.get('results', listing.data)\n                ids = [item['id'] for item in rows]
+                rows = listing.data.get('results', listing.data)
+                ids = [item['id'] for item in rows]
                 self.assertNotIn(record.pk, ids)
                 detail = self.client.get(f'/api/{endpoint}/{record.pk}/')
                 self.assertEqual(detail.status_code, 404)
