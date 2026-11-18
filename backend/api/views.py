@@ -478,13 +478,6 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
         consultancy = _crm_consultancy_for_request(self.request)
         _validate_crm_tenant_relations(consultancy, serializer.validated_data)
         note = serializer.save(consultancy=consultancy, author=self.request.user)
-
-    def perform_update(self, serializer):
-        consultancy = _crm_consultancy_for_request(self.request)
-        _validate_crm_tenant_relations(
-            consultancy, serializer.validated_data, serializer.instance
-        )
-        serializer.save(consultancy=consultancy)
         # Auto-log activity on the associated lead's timeline
         if note.lead:
             author_name = self.request.user.get_full_name() or self.request.user.username
@@ -494,6 +487,13 @@ class CounsellingNoteViewSet(viewsets.ModelViewSet):
                 activity_type='counselling_note',
                 content=f"Counselling note added by {author_name}: {note.content[:120]}{'…' if len(note.content) > 120 else ''}"
             )
+
+    def perform_update(self, serializer):
+        consultancy = _crm_consultancy_for_request(self.request)
+        _validate_crm_tenant_relations(
+            consultancy, serializer.validated_data, serializer.instance
+        )
+        serializer.save(consultancy=consultancy)
 
 
 class FollowUpViewSet(viewsets.ModelViewSet):
