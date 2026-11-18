@@ -28,12 +28,12 @@ from rest_framework.test import APIClient
 
 from api.models import Lead, LeadActivity
 from api.whatsapp_service import (
-from test_tenant_fixtures import add_aiec_membership
     WHATSAPP_MAX_MESSAGE_LENGTH,
     normalize_phone_e164,
     send_step_completion_whatsapp,
     send_whatsapp_to_lead,
-)
+ )
+from test_tenant_fixtures import add_aiec_membership
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
