@@ -193,6 +193,16 @@ class LeadViewSet(viewsets.ModelViewSet):
                 except User.DoesNotExist:
                     return Response({'error': 'Assigned staff user not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
+                consultancy = get_active_consultancy_for_user(
+                    request.user, request.headers.get('X-Consultancy-ID')
+                )
+                if not consultancy or not ConsultancyMembership.objects.filter(
+                    consultancy=consultancy, user=assignee, is_active=True
+                ).exists():
+                    return Response(
+                        {'error': 'Assigned staff must be an active member of this consultancy.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 if not request.user.is_superuser and assignee != request.user:
                     return Response(
                         {'error': 'Only Admins can assign or reassign leads to other staff members.'},
@@ -245,7 +255,16 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='staff-users')
     def staff_users(self, request):
-        users = User.objects.filter(is_active=True).filter(
+        consultancy = get_active_consultancy_for_user(
+            request.user, request.headers.get('X-Consultancy-ID')
+        )
+        if not consultancy:
+            return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+        users = User.objects.filter(
+            is_active=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        ).filter(
             Q(is_staff=True) | Q(is_superuser=True) | Q(groups__name='Staff')
         ).distinct().order_by('first_name', 'username')
         serializer = StaffUserSerializer(users, many=True)
@@ -992,9 +1011,18 @@ def manage_users(request):
     """List all staff or create a new staff member. Admin only."""
     if not request.user.is_superuser:
         return Response({'error': 'Admin access required.'}, status=403)
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=403)
 
     if request.method == 'GET':
-        users = User.objects.filter(is_staff=True).order_by('-date_joined')
+        users = User.objects.filter(
+            is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        ).order_by('-date_joined')
         data = [{
             'id':         u.id,
             'username':   u.username,
@@ -1028,6 +1056,12 @@ def manage_users(request):
         email=email, first_name=first_name, last_name=last_name,
         is_staff=True, is_superuser=(role == 'admin'), is_active=True,
     )
+    if role not in {'admin', 'staff'}:
+        user.delete()
+        return Response({'error': 'Role must be admin or staff.'}, status=400)
+    ConsultancyMembership.objects.create(
+        consultancy=consultancy, user=user, role=role, is_active=True
+    )
     if role == 'staff':
         staff_group, _ = Group.objects.get_or_create(name='Staff')
         user.groups.add(staff_group)
@@ -1048,6 +1082,11 @@ def create_staff(request):
             {'error': 'Admin access required. Staff members cannot create staff accounts.'},
             status=status.HTTP_403_FORBIDDEN
         )
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
 
     full_name = request.data.get('full_name') or request.data.get('name', '')
     full_name = str(full_name).strip()
@@ -1083,6 +1122,9 @@ def create_staff(request):
 
     staff_group, _ = Group.objects.get_or_create(name='Staff')
     user.groups.add(staff_group)
+    ConsultancyMembership.objects.create(
+        consultancy=consultancy, user=user, role='staff', is_active=True
+    )
 
     return Response({
         'id': user.id,
@@ -1104,9 +1146,18 @@ def manage_user_detail(request, user_id):
     """Get, update, or deactivate a staff member. Admin only."""
     if not request.user.is_superuser:
         return Response({'error': 'Admin access required.'}, status=403)
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=403)
 
     try:
-        user = User.objects.get(id=user_id, is_staff=True)
+        user = User.objects.get(
+            id=user_id, is_staff=True,
+            consultancy_memberships__consultancy=consultancy,
+            consultancy_memberships__is_active=True,
+        )
     except User.DoesNotExist:
         return Response({'error': 'User not found.'}, status=404)
 
