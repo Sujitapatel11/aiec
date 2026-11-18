@@ -14,6 +14,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from api.models import (
+from test_tenant_fixtures import add_aiec_membership
     Application,
     ApplicationDocumentRequirement,
     Country,
@@ -87,6 +88,8 @@ class ApplicationDocumentChecklistTests(TestCase):
             country_name='Canada',
             intake='Fall 2028',
         )
+        add_aiec_membership(self.staff)
+        add_aiec_membership(self.admin)
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
         self.requirement = self.application.document_requirements.get(
