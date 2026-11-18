@@ -2603,11 +2603,7 @@ def manage_application_detail(request, pk):
     except Application.DoesNotExist:
         return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, app)
     is_own_student = hasattr(request.user, 'student_profile') and request.user.student_profile.id == app.student.id
 
     if not _can_access_application(request, app):
@@ -2671,6 +2667,14 @@ def manage_application_detail(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _can_manage_application(request, application):
+    return user_has_consultancy_role(
+        request.user,
+        application.student.consultancy,
+        {'owner', 'admin', 'staff'},
+    )
+
+
 def _can_access_application(request, application):
     """Tenant staff need an active staff/admin role; students see only their own."""
     if (
@@ -2704,11 +2708,7 @@ def application_timeline(request, pk):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser
-        or request.user.is_staff
-        or request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
     if request.method == 'GET':
         events = ApplicationTimelineEvent.objects.filter(
             application=application,
@@ -2751,11 +2751,7 @@ def manage_application_offers(request, pk):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
 
     if request.method == 'GET':
         offers = application.offers.select_related('offer_document', 'application__student').all()
@@ -2792,11 +2788,7 @@ def manage_application_offer_detail(request, pk, offer_id):
     except ApplicationOffer.DoesNotExist:
         return Response({'error': 'Offer not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
 
     if request.method == 'GET':
         return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
@@ -2830,11 +2822,7 @@ def manage_offer_detail_by_id(request, offer_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, application)
 
     if request.method == 'GET':
         return Response(ApplicationOfferSerializer(offer, context={'request': request}).data)
@@ -2969,11 +2957,7 @@ def complete_application_workflow_step(request, pk, step_id):
     except Application.DoesNotExist:
         return Response({'error': 'Application not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    is_staff_or_admin = (
-        request.user.is_superuser or
-        request.user.is_staff or
-        request.user.groups.filter(name='Staff').exists()
-    )
+    is_staff_or_admin = _can_manage_application(request, app)
     is_own_student = (
         hasattr(request.user, 'student_profile')
         and request.user.student_profile.id == app.student_id
