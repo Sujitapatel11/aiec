@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from api.models import (
-    Appointment, Consultancy, ConsultancyMembership, CounsellingNote,
+    Appointment, Application, Consultancy, ConsultancyMembership, CounsellingNote,
     FollowUp, Lead, StudentProfile, Task,
 )
 
@@ -49,6 +49,23 @@ class CRMActivityTenantIsolationTests(TestCase):
                 appointment_date=due,
             ),
         }
+        self.application_b = Application.objects.create(
+            student=self.student_b,
+            university_name='Private B University',
+            course_name='Private B Course',
+        )
+        self.student_user_a = User.objects.create_user(
+            username='crm_student_a', password='StudentPass123!'
+        )
+        self.student_a = StudentProfile.objects.create(
+            user=self.student_user_a, full_name='Tenant A Student',
+            phone='111', destination_country='Australia', consultancy=self.tenant_a,
+        )
+        self.application_a = Application.objects.create(
+            student=self.student_a,
+            university_name='Tenant A University',
+            course_name='Tenant A Course',
+        )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff_a)
 
@@ -80,3 +97,17 @@ class CRMActivityTenantIsolationTests(TestCase):
             with self.subTest(endpoint=endpoint):
                 response = self.client.post(f'/api/{endpoint}/', payload, format='json')
                 self.assertEqual(response.status_code, 400, response.data)
+
+    def test_tenant_b_application_is_not_accessible_to_tenant_a_staff(self):
+        response = self.client.get(f'/api/applications/{self.application_b.pk}/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_tenant_a_staff_can_access_own_application(self):
+        response = self.client.get(f'/api/applications/{self.application_a.pk}/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_student_cannot_access_another_tenants_application(self):
+        student_client = APIClient()
+        student_client.force_authenticate(user=self.student_user_a)
+        response = student_client.get(f'/api/applications/{self.application_b.pk}/')
+        self.assertEqual(response.status_code, 403)
