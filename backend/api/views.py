@@ -34,7 +34,7 @@ from .serializers import (
     ApplicationDocumentRequirementSerializer
 )
 from . import cloudinary_service
-from .tenancy import get_active_consultancy_for_user, user_has_consultancy_access
+from .tenancy import get_active_consultancy_for_user, user_has_consultancy_access, user_has_consultancy_role
 from .cloudinary_service import (
     is_cloudinary_configured, upload_video_to_cloudinary, delete_video_from_cloudinary,
     upload_document_to_cloudinary, delete_document_from_cloudinary
@@ -1009,13 +1009,13 @@ def chat_counsellor(request):
 @permission_classes([IsAuthenticated])
 def manage_users(request):
     """List all staff or create a new staff member. Admin only."""
-    if not request.user.is_superuser:
-        return Response({'error': 'Admin access required.'}, status=403)
     consultancy = get_active_consultancy_for_user(
         request.user, request.headers.get('X-Consultancy-ID')
     )
-    if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=403)
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=403)
 
     if request.method == 'GET':
         users = User.objects.filter(
@@ -1028,7 +1028,7 @@ def manage_users(request):
             'username':   u.username,
             'name':       u.get_full_name() or u.username,
             'email':      u.email,
-            'role':       'admin' if u.is_superuser else 'staff',
+            'role':       u.consultancy_memberships.filter(consultancy=consultancy, is_active=True).values_list('role', flat=True).first() or 'staff',
             'is_active':  u.is_active,
             'date_joined': u.date_joined.strftime('%d %b %Y'),
         } for u in users]
@@ -1056,7 +1056,7 @@ def manage_users(request):
     user = User.objects.create_user(
         username=username, password=password,
         email=email, first_name=first_name, last_name=last_name,
-        is_staff=True, is_superuser=(role == 'admin'), is_active=True,
+        is_staff=True, is_superuser=False, is_active=True,
     )
     ConsultancyMembership.objects.create(
         consultancy=consultancy, user=user, role=role, is_active=True
@@ -1076,16 +1076,13 @@ def manage_users(request):
 @permission_classes([IsAuthenticated])
 def create_staff(request):
     """Create a new staff member account. Admin-only (is_superuser check)."""
-    if not request.user.is_superuser:
-        return Response(
-            {'error': 'Admin access required. Staff members cannot create staff accounts.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
     consultancy = get_active_consultancy_for_user(
         request.user, request.headers.get('X-Consultancy-ID')
     )
-    if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
     full_name = request.data.get('full_name') or request.data.get('name', '')
     full_name = str(full_name).strip()
@@ -1143,13 +1140,13 @@ def create_staff(request):
 @permission_classes([IsAuthenticated])
 def manage_user_detail(request, user_id):
     """Get, update, or deactivate a staff member. Admin only."""
-    if not request.user.is_superuser:
-        return Response({'error': 'Admin access required.'}, status=403)
     consultancy = get_active_consultancy_for_user(
         request.user, request.headers.get('X-Consultancy-ID')
     )
-    if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=403)
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=403)
 
     try:
         user = User.objects.get(
@@ -1168,7 +1165,7 @@ def manage_user_detail(request, user_id):
         return Response({
             'id': user.id, 'username': user.username,
             'name': user.get_full_name(), 'email': user.email,
-            'role': 'admin' if user.is_superuser else 'staff',
+            'role': ConsultancyMembership.objects.filter(consultancy=consultancy, user=user, is_active=True).values_list('role', flat=True).first() or 'staff',
             'is_active': user.is_active,
             'date_joined': user.date_joined.strftime('%d %b %Y'),
         })
@@ -1190,13 +1187,12 @@ def manage_user_detail(request, user_id):
             new_role = request.data['role']
             if new_role not in {'admin', 'staff'}:
                 return Response({'error': 'Role must be admin or staff.'}, status=400)
-            user.is_superuser = new_role == 'admin'
+            # Tenant role is stored on ConsultancyMembership; never grant global superuser.
             ConsultancyMembership.objects.filter(
                 consultancy=consultancy, user=user
             ).update(role=new_role)
-            if new_role == 'staff':
-                staff_group, _ = Group.objects.get_or_create(name='Staff')
-                user.groups.add(staff_group)
+            staff_group, _ = Group.objects.get_or_create(name='Staff')
+            user.groups.add(staff_group)
         if 'email' in request.data:
             user.email = request.data['email']
         if 'first_name' in request.data:
@@ -2369,18 +2365,27 @@ def reset_student_password(request, student_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    consultancy = get_active_consultancy_for_user(
+        request.user, request.headers.get('X-Consultancy-ID')
+    )
+    if not consultancy:
+        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+
     try:
-        student = StudentProfile.objects.select_related('user', 'enrolled_by').get(pk=student_id)
+        student = StudentProfile.objects.select_related('user', 'enrolled_by').get(
+            pk=student_id, consultancy=consultancy
+        )
     except StudentProfile.DoesNotExist:
         return Response({'error': 'Student record not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Staff can only reset passwords for students they enrolled
-    if not request.user.is_superuser:
-        if student.enrolled_by_id != request.user.id:
-            return Response(
-                {'error': 'You can only reset passwords for students you personally enrolled.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+    is_tenant_admin = user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    )
+    if not is_tenant_admin and student.enrolled_by_id != request.user.id:
+        return Response(
+            {'error': 'Staff can only reset passwords for students they personally enrolled in this consultancy.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     new_password = request.data.get('new_password', '').strip()
     if not new_password:
@@ -2413,17 +2418,13 @@ def reset_staff_password(request, user_id):
     Same full password policy as account creation.
     Existing DRF auth token invalidated on success.
     """
-    if not request.user.is_superuser:
-        return Response(
-            {'error': 'Admin access required. Staff cannot reset other staff passwords.'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
     consultancy = get_active_consultancy_for_user(
         request.user, request.headers.get('X-Consultancy-ID')
     )
-    if not consultancy:
-        return Response({'error': 'An active consultancy membership is required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not consultancy or not user_has_consultancy_role(
+        request.user, consultancy, {'owner', 'admin'}
+    ):
+        return Response({'error': 'Consultancy admin access required.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
         target = User.objects.get(
