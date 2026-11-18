@@ -83,6 +83,49 @@ class ConsultancyOwnershipTests(TestCase):
         response = self.client.get(f'/api/applications/{self.app_b.pk}/')
         self.assertEqual(response.status_code, 403)
 
+    def test_dashboard_stats_are_scoped_to_active_consultancy(self):
+        Lead.objects.create(
+            name='Tenant A Lead', email='a@example.test', phone='111',
+            status='new', consultancy=self.a,
+        )
+        Lead.objects.create(
+            name='Tenant B Lead', email='b@example.test', phone='222',
+            status='converted', consultancy=self.b,
+        )
+        self.client.force_authenticate(user=self.staff_a)
+        response = self.client.get('/api/dashboard/stats/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total_leads'], 1)
+        self.assertEqual(response.data['status_breakdown'], {'new': 1})
+        self.assertEqual(
+            [row['email'] for row in response.data['recent_leads']],
+            ['a@example.test'],
+        )
+
+    def test_lead_duplicate_checks_do_not_cross_tenant_boundaries(self):
+        Lead.objects.create(
+            name='Tenant B Existing Lead', email='shared@example.test',
+            phone='+9779800000000', status='new', consultancy=self.b,
+        )
+        self.client.force_authenticate(user=self.staff_a)
+        response = self.client.post('/api/leads/', {
+            'name': 'Tenant A Same Contact',
+            'email': 'shared@example.test',
+            'phone': '+9779800000000',
+            'country_of_residence': 'Nepal',
+            'qualification': "Bachelor's Degree",
+            'marks': 80,
+            'english_score': 7,
+            'budget': 10000,
+            'course_interest': 'Engineering',
+            'recommended_country': 'Canada',
+            'recommended_course': 'MSc Engineering',
+            'status': 'new',
+            'source': 'crm_manual',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Lead.objects.filter(email='shared@example.test').count(), 2)
+
     def test_student_can_only_list_own_applications(self):
         self.client.force_authenticate(user=self.student_user_a)
         response = self.client.get(f'/api/students/{self.student_b.pk}/applications/')
